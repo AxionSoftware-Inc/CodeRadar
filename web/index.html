@@ -579,8 +579,8 @@ function initThree() {
     scene.background = new THREE.Color(0x07090e);
     scene.fog = new THREE.FogExp2(0x07090e, 0.00045);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 30000);
-    camera.position.set(0, 800, 1200);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 40000);
+    camera.position.set(0, 1400, 2200);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -606,7 +606,7 @@ function initThree() {
     scene.add(selectBeamGroup);
     scene.add(particlesGroup);
 
-    const grid = new THREE.GridHelper(6000, 100, 0x161b22, 0x0d1117);
+    const grid = new THREE.GridHelper(12000, 120, 0x161b22, 0x0d1117);
     grid.position.y = -1;
     scene.add(grid);
 
@@ -741,34 +741,89 @@ function buildCity(data) {
         modules[m].push(n);
     });
 
+    // Calculate sizes per module to allocate spacious islands
     const keys = Object.keys(modules);
-    const cols = Math.ceil(Math.sqrt(keys.length));
-    const spacing = 420;
+    const modSizes = {};
+    const modCols = {};
+    const modPlatSizes = {};
+
+    keys.forEach(m => {
+        const cnt = modules[m].length;
+        const inCols = Math.ceil(Math.sqrt(cnt));
+        modCols[m] = inCols;
+        // 56px per building cell + 80px border padding
+        modPlatSizes[m] = Math.max(320, inCols * 56 + 80);
+    });
+
+    // Arrange islands with generous spacing (min 280px gap between island edges)
+    const islandGap = 320;
+    const gridCols = Math.ceil(Math.sqrt(keys.length));
+    
+    // Calculate row heights and column widths
+    const colWidths = new Array(gridCols).fill(0);
+    const rowHeights = new Array(Math.ceil(keys.length / gridCols)).fill(0);
+
+    keys.forEach((m, idx) => {
+        const c = idx % gridCols;
+        const r = Math.floor(idx / gridCols);
+        const sz = modPlatSizes[m];
+        if (sz > colWidths[c]) colWidths[c] = sz;
+        if (sz > rowHeights[r]) rowHeights[r] = sz;
+    });
+
+    const colOffsets = [];
+    let curX = 0;
+    for (let c = 0; c < gridCols; c++) {
+        colOffsets.push(curX + colWidths[c] / 2);
+        curX += colWidths[c] + islandGap;
+    }
+    const totalW = curX - islandGap;
+
+    const rowOffsets = [];
+    let curZ = 0;
+    for (let r = 0; r < rowHeights.length; r++) {
+        rowOffsets.push(curZ + rowHeights[r] / 2);
+        curZ += rowHeights[r] + islandGap;
+    }
+    const totalH = curZ - islandGap;
 
     keys.forEach((modName, mIdx) => {
-        const row = Math.floor(mIdx / cols);
-        const col = mIdx % cols;
-        const dx = (col - cols / 2) * spacing;
-        const dz = (row - cols / 2) * spacing;
+        const c = mIdx % gridCols;
+        const r = Math.floor(mIdx / gridCols);
+        const dx = colOffsets[c] - totalW / 2;
+        const dz = rowOffsets[r] - totalH / 2;
 
         const fList = modules[modName];
-        const inCols = Math.ceil(Math.sqrt(fList.length));
-        const pSize = Math.max(200, inCols * 34 + 40);
+        const inCols = modCols[modName];
+        const pSize = modPlatSizes[modName];
 
-        // Island Platform
+        // Island Base Platform (dark with subtle cyan/purple border)
         const plat = new THREE.Mesh(
-            new THREE.BoxGeometry(pSize, 4, pSize),
-            new THREE.MeshStandardMaterial({ color: 0x0c1017, roughness: 0.9 })
+            new THREE.BoxGeometry(pSize, 6, pSize),
+            new THREE.MeshStandardMaterial({ 
+                color: 0x0c111a, 
+                roughness: 0.85, 
+                metalness: 0.2
+            })
         );
-        plat.position.set(dx, 2, dz);
+        plat.position.set(dx, 3, dz);
         cityGroup.add(plat);
 
+        // Island Border Wireframe for distinct visual boundaries
+        const borderGeom = new THREE.EdgesGeometry(new THREE.BoxGeometry(pSize, 6.2, pSize));
+        const borderLine = new THREE.LineSegments(borderGeom, new THREE.LineBasicMaterial({ color: 0x223249, transparent: true, opacity: 0.8 }));
+        borderLine.position.set(dx, 3, dz);
+        cityGroup.add(borderLine);
+
+        // Buildings arranged with 56px pitch (24px width + 32px open street space)
         fList.forEach((f, fIdx) => {
             const fr = Math.floor(fIdx / inCols);
             const fc = fIdx % inCols;
-            const bx = dx - (pSize / 2) + 26 + (fc * 32);
-            const bz = dz - (pSize / 2) + 26 + (fr * 32);
-            const bh = Math.max(14, Math.min(300, (f.loc || 20) * 0.38));
+            const startX = dx - (pSize / 2) + 40 + 12;
+            const startZ = dz - (pSize / 2) + 40 + 12;
+            const bx = startX + (fc * 56);
+            const bz = startZ + (fr * 56);
+            const bh = Math.max(16, Math.min(320, (f.loc || 20) * 0.38));
 
             let color = getLangColorHex(f.name);
             if (f.has_cycle || f.is_layer_violation) color = 0xf85149;
@@ -776,16 +831,16 @@ function buildCity(data) {
             else if (f.is_clone) color = 0xa371f7;
 
             const bldg = new THREE.Mesh(
-                new THREE.BoxGeometry(20, bh, 20),
+                new THREE.BoxGeometry(24, bh, 24),
                 new THREE.MeshStandardMaterial({
                     color,
-                    roughness: 0.3,
-                    metalness: 0.45,
+                    roughness: 0.25,
+                    metalness: 0.5,
                     emissive: (f.has_cycle || f.is_clone) ? color : 0x000000,
-                    emissiveIntensity: f.has_cycle ? 0.35 : (f.is_clone ? 0.25 : 0)
+                    emissiveIntensity: f.has_cycle ? 0.4 : (f.is_clone ? 0.3 : 0)
                 })
             );
-            bldg.position.set(bx, bh / 2 + 4, bz);
+            bldg.position.set(bx, bh / 2 + 6, bz);
             bldg.userData = f;
             cityGroup.add(bldg);
             clickableObjects.push(bldg);
@@ -1061,7 +1116,7 @@ function flyTo(x, y, z, target) {
 
 function resetCam() {
     clearGroup(selectBeamGroup);
-    flyTo(0, 800, 1200, { x: 0, y: 0, z: 0 });
+    flyTo(0, 1400, 2200, { x: 0, y: 0, z: 0 });
 }
 
 function flyNextCycle() {
