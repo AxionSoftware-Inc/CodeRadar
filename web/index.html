@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ArchRadar 3D</title>
+    <title>ArchRadar 3D — Spatial Architecture Studio</title>
     <style>
         :root {
             --bg: #07090e;
@@ -16,6 +16,12 @@
             --warning: #d29922;
             --info: #a371f7;
             --success: #3fb950;
+            --cpp: #60a5fa;
+            --dart: #00d2b8;
+            --csharp: #a78bfa;
+            --python: #fbbf24;
+            --js: #f43f5e;
+            --other: #94a3b8;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body {
@@ -35,12 +41,13 @@
             z-index: 1;
         }
 
+        /* Top Header */
         header {
             position: absolute;
             top: 14px;
             left: 14px;
             right: 14px;
-            height: 50px;
+            height: 52px;
             background: var(--panel);
             backdrop-filter: blur(16px);
             border: 1px solid var(--border);
@@ -103,13 +110,15 @@
             transition: all 0.15s;
         }
         .btn-icon:hover { border-color: var(--primary); color: var(--primary); }
+        .btn-icon.active { background: rgba(56, 189, 248, 0.2); border-color: var(--primary); color: var(--primary); }
 
+        /* Left Navigation & Tree Drawer */
         .drawer-left {
             position: absolute;
-            top: 74px;
+            top: 76px;
             left: 14px;
             bottom: 16px;
-            width: 326px;
+            width: 330px;
             background: var(--panel);
             backdrop-filter: blur(16px);
             border: 1px solid var(--border);
@@ -119,21 +128,30 @@
             flex-direction: column;
             transition: transform 0.25s ease;
         }
-        .drawer-left.collapsed { transform: translateX(-346px); }
-        .drawer-head {
-            padding: 10px 12px;
+        .drawer-left.collapsed { transform: translateX(-350px); }
+        .drawer-nav {
+            display: flex;
             border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 13px;
-            font-weight: 600;
+            padding: 4px;
+            gap: 4px;
+            background: rgba(0, 0, 0, 0.2);
         }
-        .filter-bar {
-            padding: 8px 10px 4px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
+        .nav-tab {
+            flex: 1;
+            padding: 6px 0;
+            font-size: 11px;
+            font-weight: 600;
+            text-align: center;
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .nav-tab.active { background: rgba(255, 255, 255, 0.08); color: #fff; }
+
+        .search-box {
+            padding: 8px 10px;
             border-bottom: 1px solid rgba(48, 54, 61, 0.35);
         }
         .search-input {
@@ -145,46 +163,61 @@
             color: var(--text);
             font-size: 12px;
             outline: none;
-            user-select: text;
         }
         .search-input:focus { border-color: var(--primary); }
-        .filter-pills { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 4px; }
-        .pill {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--border);
-            color: var(--muted);
-            font-size: 10px;
-            padding: 3px 8px;
-            border-radius: 12px;
-            cursor: pointer;
-        }
-        .pill.active {
-            background: rgba(56, 189, 248, 0.16);
-            border-color: var(--primary);
-            color: var(--primary);
-            font-weight: 600;
-        }
 
-        .issues-scroll {
+        /* Language Badges Filter */
+        .lang-bar {
+            display: flex;
+            gap: 4px;
+            padding: 6px 10px;
+            overflow-x: auto;
+            border-bottom: 1px solid rgba(48, 54, 61, 0.35);
+        }
+        .lang-chip {
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            color: var(--muted);
+            background: rgba(0,0,0,0.3);
+            white-space: nowrap;
+        }
+        .lang-chip.active { font-weight: 700; color: #fff; border-color: currentColor; }
+
+        .drawer-content {
             flex: 1;
             overflow-y: auto;
             padding: 8px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
         }
+
+        /* Tree View */
+        .tree-node {
+            font-size: 12px;
+            padding: 3px 6px;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--muted);
+        }
+        .tree-node:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+        .tree-node.active { background: rgba(56, 189, 248, 0.15); color: var(--primary); font-weight: 600; }
+        .tree-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; margin-left: auto; }
+
+        /* Issue Card */
         .issue-card {
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border);
             border-radius: 6px;
             padding: 8px 10px;
             cursor: pointer;
+            margin-bottom: 6px;
             transition: all 0.15s;
         }
-        .issue-card:hover, .issue-card.active {
-            border-color: var(--primary);
-            background: rgba(56, 189, 248, 0.08);
-        }
+        .issue-card:hover, .issue-card.active { border-color: var(--primary); background: rgba(56, 189, 248, 0.08); }
         .issue-card.CRITICAL { border-left: 3px solid var(--critical); }
         .issue-card.WARNING { border-left: 3px solid var(--warning); }
         .issue-card.INFO { border-left: 3px solid var(--info); }
@@ -195,12 +228,13 @@
         .card-title { font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .card-desc { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
 
+        /* Right Inspector */
         .drawer-right {
             position: absolute;
-            top: 74px;
+            top: 76px;
             right: 14px;
             bottom: 16px;
-            width: 300px;
+            width: 320px;
             background: var(--panel);
             backdrop-filter: blur(16px);
             border: 1px solid var(--border);
@@ -208,11 +242,11 @@
             z-index: 10;
             display: flex;
             flex-direction: column;
-            padding: 12px;
+            padding: 14px;
             transition: transform 0.25s ease;
             overflow-y: auto;
         }
-        .drawer-right.collapsed { transform: translateX(320px); }
+        .drawer-right.collapsed { transform: translateX(340px); }
         .stat-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -241,12 +275,11 @@
             cursor: pointer;
         }
         .dep-chip.in { background: rgba(63, 185, 80, 0.12); border-color: rgba(63, 185, 80, 0.35); }
-        .dep-chip.clone { background: rgba(163, 113, 247, 0.16); border-color: rgba(163, 113, 247, 0.45); }
         .dep-chip:hover { border-color: #fff; }
 
         .panel-toggle-left {
             position: absolute;
-            top: 74px;
+            top: 76px;
             left: 14px;
             z-index: 15;
             background: var(--panel);
@@ -261,7 +294,26 @@
             cursor: pointer;
             transition: left 0.25s ease;
         }
-        .panel-toggle-left.open { left: 348px; }
+        .panel-toggle-left.open { left: 352px; }
+
+        /* Floating 3D HUD / Legend */
+        .hud-legend {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 6px 14px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            z-index: 5;
+            backdrop-filter: blur(12px);
+        }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
 
         #tooltip {
             position: absolute;
@@ -290,12 +342,14 @@
     </div>
 
     <div class="mode-tabs">
-        <button class="mode-btn active" id="btnCity" onclick="setMode('CITY')">Code City</button>
-        <button class="mode-btn" id="btnUniverse" onclick="setMode('UNIVERSE')">Topologik Oqim</button>
-        <button class="mode-btn" id="btnMicro" onclick="setMode('MICRO')">Funksiyalar</button>
+        <button class="mode-btn active" id="btnCity" onclick="setMode('CITY')">🏢 Kod Shahri</button>
+        <button class="mode-btn" id="btnLayer" onclick="setMode('LAYER')">🥞 Qatlamlar Oqimi</button>
+        <button class="mode-btn" id="btnGalaxy" onclick="setMode('GALAXY')">🌌 Galaktika</button>
+        <button class="mode-btn" id="btnMicro" onclick="setMode('MICRO')">⚙️ Funksiyalar</button>
     </div>
 
     <div class="actions">
+        <button class="btn-icon active" id="btnFlowToggle" onclick="toggleFlowAnimation()">🌊 Oqim Animatsiyasi</button>
         <button class="btn-icon" onclick="flyNextCycle()">⚡ Halqa</button>
         <button class="btn-icon" onclick="flyNextClone()">🧬 Dublikat</button>
         <button class="btn-icon" onclick="resetCam()">🎥 Umumiy</button>
@@ -307,31 +361,43 @@
 </header>
 
 <div class="drawer-left" id="drawerLeft">
-    <div class="drawer-head">
-        <span>Muammolar</span>
-        <span id="issueCount" style="color: var(--muted); font-size: 12px;">0 ta</span>
+    <div class="drawer-nav">
+        <button class="nav-tab active" id="tabTree" onclick="switchLeftTab('TREE')">📁 Papka & Tillar</button>
+        <button class="nav-tab" id="tabIssues" onclick="switchLeftTab('ISSUES')">⚠️ Muammolar</button>
     </div>
-    <div class="filter-bar">
-        <input class="search-input" id="searchInput" type="text" placeholder="Fayl, funksiya yoki muammo qidirish...">
-        <div class="filter-pills">
-            <button class="pill active" onclick="setFilter('ALL', this)">Barchasi</button>
-            <button class="pill" onclick="setFilter('CIRCULAR_DEPENDENCY', this)">Halqalar</button>
-            <button class="pill" onclick="setFilter('CODE_DUPLICATION', this)">Dublikatlar</button>
-            <button class="pill" onclick="setFilter('OTHER', this)">God / Qatlam</button>
-        </div>
+
+    <div class="search-box">
+        <input class="search-input" id="searchInput" type="text" placeholder="Fayl yoki modul qidirish...">
     </div>
-    <div class="issues-scroll" id="issuesList"></div>
+
+    <div class="lang-bar" id="langBar">
+        <span class="lang-chip active" onclick="filterByLang('ALL', this)">Barchasi</span>
+        <span class="lang-chip" onclick="filterByLang('cpp', this)" style="color:var(--cpp)">C/C++</span>
+        <span class="lang-chip" onclick="filterByLang('dart', this)" style="color:var(--dart)">Dart / Flutter</span>
+        <span class="lang-chip" onclick="filterByLang('cs', this)" style="color:var(--csharp)">C#</span>
+        <span class="lang-chip" onclick="filterByLang('python', this)" style="color:var(--python)">Python</span>
+    </div>
+
+    <div class="drawer-content" id="drawerContent"></div>
 </div>
 <div class="panel-toggle-left open" id="toggleLeftBtn" onclick="toggleLeftDrawer()">◀</div>
 
 <div class="drawer-right collapsed" id="drawerRight">
     <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border);">
-        <span style="font-size: 13px; font-weight: 600;">Ko'rsatkichlar</span>
+        <span style="font-size: 13px; font-weight: 600;">Obyekt Ko'rsatkichlari</span>
         <span style="cursor: pointer; color: var(--muted);" onclick="toggleRightDrawer()">✕</span>
     </div>
     <div id="inspectorBody" style="font-size: 12px; color: var(--muted); margin-top: 10px;">
-        Fazodagi istalgan obyektni bosing.
+        Fazodagi istalgan binoni bosing.
     </div>
+</div>
+
+<div class="hud-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--dart)"></div>Dart / UI</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--cpp)"></div>C++ Core</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--csharp)"></div>C# Plugins</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--critical)"></div>Sikl / Xato</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--info)"></div>Dublikat</div>
 </div>
 
 <div id="tooltip"></div>
@@ -339,16 +405,56 @@
 <script>
 let appData = null;
 let currentMode = 'CITY';
-let currentFilter = 'ALL';
+let activeLeftTab = 'TREE';
+let selectedLang = 'ALL';
 let searchQuery = '';
+let flowAnimationActive = true;
+
+const LANG_COLORS = {
+    'cpp': 0x60a5fa,
+    'hpp': 0x60a5fa,
+    'h': 0x60a5fa,
+    'cc': 0x60a5fa,
+    'c': 0x60a5fa,
+    'dart': 0x00d2b8,
+    'cs': 0xa78bfa,
+    'py': 0xfbbf24,
+    'js': 0xf43f5e,
+    'ts': 0x38bdf8
+};
+
+function getLanguage(filename) {
+    if (!filename || !filename.includes('.')) return 'other';
+    const ext = filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+    if (['cpp', 'hpp', 'h', 'cc', 'c'].includes(ext)) return 'cpp';
+    if (ext === 'dart') return 'dart';
+    if (ext === 'cs') return 'cs';
+    if (ext === 'py') return 'python';
+    if (['js', 'ts'].includes(ext)) return 'js';
+    return 'other';
+}
+
+function getLangColorHex(filename) {
+    const l = getLanguage(filename);
+    if (l === 'cpp') return 0x60a5fa;
+    if (l === 'dart') return 0x00d2b8;
+    if (l === 'cs') return 0xa78bfa;
+    if (l === 'python') return 0xfbbf24;
+    if (l === 'js') return 0xf43f5e;
+    return 0x94a3b8;
+}
+
 let scene, camera, renderer, controls;
-let cityGroup, beamGroup, selectBeamGroup;
+let cityGroup, beamGroup, selectBeamGroup, particlesGroup;
 let clickableObjects = [];
 let meshMap = new Map();
 let nodeById = new Map();
 let raycaster, mouse;
 let cycleIndex = 0;
 let cloneIndex = 0;
+let flowCurves = [];
+
+// LANG_COLORS already defined above
 
 function unpackBinary(arrayBuffer) {
     const view = new DataView(arrayBuffer);
@@ -398,12 +504,14 @@ function unpackBinary(arrayBuffer) {
         const pr = view.getFloat32(off, true); off += 4;
         const flags = view.getUint8(off); off += 1;
 
+        const name = getStr(nameOff);
         nodes.push({
             id: getStr(idOff),
-            name: getStr(nameOff),
+            name: name,
             type: typeCode === 0 ? "module" : (typeCode === 1 ? "file" : "function"),
             module: getStr(modOff),
             file_path: getStr(fileOff),
+            lang: getLanguage(name),
             loc,
             line_start: lineStart,
             line_end: lineEnd,
@@ -469,10 +577,10 @@ function initThree() {
     const container = document.getElementById('webgl-container');
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x07090e);
-    scene.fog = new THREE.FogExp2(0x07090e, 0.00055);
+    scene.fog = new THREE.FogExp2(0x07090e, 0.00045);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
-    camera.position.set(0, 650, 950);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 30000);
+    camera.position.set(0, 800, 1200);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -484,24 +592,35 @@ function initThree() {
     controls.dampingFactor = 0.05;
     controls.maxPolarAngle = Math.PI / 2 - 0.01;
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.72));
-    const d1 = new THREE.DirectionalLight(0x38bdf8, 0.85);
-    d1.position.set(300, 800, 300);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const d1 = new THREE.DirectionalLight(0x38bdf8, 0.9);
+    d1.position.set(400, 1000, 400);
     scene.add(d1);
 
     cityGroup = new THREE.Group();
     beamGroup = new THREE.Group();
     selectBeamGroup = new THREE.Group();
+    particlesGroup = new THREE.Group();
     scene.add(cityGroup);
     scene.add(beamGroup);
     scene.add(selectBeamGroup);
+    scene.add(particlesGroup);
 
-    const grid = new THREE.GridHelper(5000, 80, 0x161b22, 0x0d1117);
+    const grid = new THREE.GridHelper(6000, 100, 0x161b22, 0x0d1117);
     grid.position.y = -1;
     scene.add(grid);
 
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
+
+    // Particle flow pool
+    const particleCount = 200;
+    const pGeom = new THREE.BufferGeometry();
+    const pPos = new Float32Array(particleCount * 3);
+    pGeom.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const pMat = new THREE.PointsMaterial({ color: 0x38bdf8, size: 5, transparent: true, opacity: 0.85 });
+    const pPoints = new THREE.Points(pGeom, pMat);
+    particlesGroup.add(pPoints);
 
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
@@ -511,6 +630,29 @@ function initThree() {
 
     renderer.domElement.addEventListener('mousemove', onMove);
     renderer.domElement.addEventListener('click', onClick);
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+
+        // Animate flow particles along curves
+        if (flowAnimationActive && flowCurves.length > 0) {
+            const positions = pGeom.attributes.position.array;
+            for (let i = 0; i < particleCount; i++) {
+                const cIdx = i % flowCurves.length;
+                const item = flowCurves[cIdx];
+                item.progress = (item.progress + 0.004) % 1.0;
+                const pt = item.curve.getPoint(item.progress);
+                positions[i * 3] = pt.x;
+                positions[i * 3 + 1] = pt.y;
+                positions[i * 3 + 2] = pt.z;
+            }
+            pGeom.attributes.position.needsUpdate = true;
+        }
+
+        renderer.render(scene, camera);
+    }
+
     animate();
 }
 
@@ -531,7 +673,7 @@ function onMove(e) {
         tip.style.display = 'block';
         tip.style.left = (e.clientX + 14) + 'px';
         tip.style.top = (e.clientY + 14) + 'px';
-        tip.innerHTML = `<strong>${u.name}</strong> · ${u.loc || 0} qator`;
+        tip.innerHTML = `<strong>${u.name}</strong> · ${u.loc || 0} qator<br><span style="color:var(--muted)">${u.module || ''}</span>`;
         renderer.domElement.style.cursor = 'pointer';
     } else {
         tip.style.display = 'none';
@@ -557,11 +699,11 @@ function resolveMeshForNode(nodeId) {
     return null;
 }
 
-function drawArc(p1, p2, hex, targetGroup = beamGroup, opacity = 0.8) {
-    if (!p1 || !p2 || p1.distanceTo(p2) < 1) return;
+function drawArc(p1, p2, hex, targetGroup = beamGroup, opacity = 0.8, registerFlow = false) {
+    if (!p1 || !p2 || p1.distanceTo(p2) < 2) return null;
     const mx = (p1.x + p2.x) / 2;
     const mz = (p1.z + p2.z) / 2;
-    const my = Math.max(p1.y, p2.y) + Math.min(220, Math.hypot(p2.x - p1.x, p2.z - p1.z) * 0.35 + 25);
+    const my = Math.max(p1.y, p2.y) + Math.min(260, Math.hypot(p2.x - p1.x, p2.z - p1.z) * 0.35 + 30);
 
     const curve = new THREE.QuadraticBezierCurve3(
         new THREE.Vector3(p1.x, p1.y, p1.z),
@@ -573,18 +715,27 @@ function drawArc(p1, p2, hex, targetGroup = beamGroup, opacity = 0.8) {
         new THREE.LineBasicMaterial({ color: hex, transparent: true, opacity })
     );
     targetGroup.add(line);
+
+    if (registerFlow) {
+        flowCurves.push({ curve, color: hex, progress: Math.random() });
+    }
+    return line;
 }
 
+/* 1. CODE CITY MODE: Modules as Islands, separated by Language districts */
 function buildCity(data) {
     clearGroup(cityGroup);
     clearGroup(beamGroup);
     clearGroup(selectBeamGroup);
     clickableObjects = [];
     meshMap.clear();
+    flowCurves = [];
 
+    // Group files by module
     const modules = {};
     const files = data.nodes.filter(n => n.type === 'file');
     files.forEach(n => {
+        if (selectedLang !== 'ALL' && n.lang !== selectedLang) return;
         const m = n.module || 'root';
         if (!modules[m]) modules[m] = [];
         modules[m].push(n);
@@ -592,7 +743,7 @@ function buildCity(data) {
 
     const keys = Object.keys(modules);
     const cols = Math.ceil(Math.sqrt(keys.length));
-    const spacing = 380;
+    const spacing = 420;
 
     keys.forEach((modName, mIdx) => {
         const row = Math.floor(mIdx / cols);
@@ -602,38 +753,39 @@ function buildCity(data) {
 
         const fList = modules[modName];
         const inCols = Math.ceil(Math.sqrt(fList.length));
-        const pSize = Math.max(180, inCols * 32 + 30);
+        const pSize = Math.max(200, inCols * 34 + 40);
 
+        // Island Platform
         const plat = new THREE.Mesh(
-            new THREE.BoxGeometry(pSize, 2, pSize),
-            new THREE.MeshStandardMaterial({ color: 0x0d1117, roughness: 0.9 })
+            new THREE.BoxGeometry(pSize, 4, pSize),
+            new THREE.MeshStandardMaterial({ color: 0x0c1017, roughness: 0.9 })
         );
-        plat.position.set(dx, 1, dz);
+        plat.position.set(dx, 2, dz);
         cityGroup.add(plat);
 
         fList.forEach((f, fIdx) => {
             const fr = Math.floor(fIdx / inCols);
             const fc = fIdx % inCols;
-            const bx = dx - (pSize / 2) + 24 + (fc * 30);
-            const bz = dz - (pSize / 2) + 24 + (fr * 30);
-            const bh = Math.max(12, Math.min(280, (f.loc || 20) * 0.35));
+            const bx = dx - (pSize / 2) + 26 + (fc * 32);
+            const bz = dz - (pSize / 2) + 26 + (fr * 32);
+            const bh = Math.max(14, Math.min(300, (f.loc || 20) * 0.38));
 
-            let color = 0x38bdf8;
+            let color = getLangColorHex(f.name);
             if (f.has_cycle || f.is_layer_violation) color = 0xf85149;
             else if (f.is_god) color = 0xd29922;
             else if (f.is_clone) color = 0xa371f7;
 
             const bldg = new THREE.Mesh(
-                new THREE.BoxGeometry(18, bh, 18),
+                new THREE.BoxGeometry(20, bh, 20),
                 new THREE.MeshStandardMaterial({
                     color,
                     roughness: 0.3,
-                    metalness: 0.5,
+                    metalness: 0.45,
                     emissive: (f.has_cycle || f.is_clone) ? color : 0x000000,
-                    emissiveIntensity: (f.has_cycle || f.is_clone) ? 0.25 : 0
+                    emissiveIntensity: f.has_cycle ? 0.35 : (f.is_clone ? 0.25 : 0)
                 })
             );
-            bldg.position.set(bx, bh / 2 + 2, bz);
+            bldg.position.set(bx, bh / 2 + 4, bz);
             bldg.userData = f;
             cityGroup.add(bldg);
             clickableObjects.push(bldg);
@@ -641,42 +793,116 @@ function buildCity(data) {
         });
     });
 
-    // Cycle & Clone arcs
+    // Draw active flow beams between modules/files
+    data.edges.filter(e => e.type === 'imports').slice(0, 200).forEach(e => {
+        const s = meshMap.get(e.source);
+        const t = meshMap.get(e.target);
+        if (s && t) drawArc(s.position, t.position, 0x38bdf8, beamGroup, 0.22, true);
+    });
+
+    // Cycle arcs
     data.issues.filter(i => i.type === 'CIRCULAR_DEPENDENCY').forEach(iss => {
         for (let i = 0; i + 1 < iss.involved_nodes.length; i++) {
             const s = resolveMeshForNode(iss.involved_nodes[i]);
             const t = resolveMeshForNode(iss.involved_nodes[i + 1]);
-            if (s && t) drawArc(s.position, t.position, 0xf85149, beamGroup, 0.75);
-        }
-    });
-    data.issues.filter(i => i.type === 'CODE_DUPLICATION').forEach(iss => {
-        if (iss.involved_nodes.length >= 2) {
-            const s = resolveMeshForNode(iss.involved_nodes[0]);
-            const t = resolveMeshForNode(iss.involved_nodes[1]);
-            if (s && t) drawArc(s.position, t.position, 0xa371f7, beamGroup, 0.55);
+            if (s && t) drawArc(s.position, t.position, 0xf85149, beamGroup, 0.85, true);
         }
     });
 }
 
-function buildUniverse(data) {
+/* 2. LAYER FLOW MODE: Clean Architecture Tiers (Apps -> Services -> Core) */
+function buildLayerFlow(data) {
     clearGroup(cityGroup);
     clearGroup(beamGroup);
     clearGroup(selectBeamGroup);
     clickableObjects = [];
     meshMap.clear();
+    flowCurves = [];
 
     const files = data.nodes.filter(n => n.type === 'file');
-    const rad = 460;
+    
+    // Assign 3 horizontal elevation layers
+    const getLayerY = (mod) => {
+        if (mod.includes('core')) return 40;            // Foundation (Ground)
+        if (mod.includes('api') || mod.includes('plugin')) return 240; // Mid tier
+        return 440;                                    // Apps / UI tier (Top)
+    };
+
+    const layerTiers = { 40: [], 240: [], 440: [] };
+    files.forEach(f => {
+        const y = getLayerY(f.module);
+        layerTiers[y].push(f);
+    });
+
+    [40, 240, 440].forEach(tierY => {
+        const list = layerTiers[tierY];
+        const cols = Math.ceil(Math.sqrt(Math.max(1, list.length)));
+        const pSize = Math.max(300, cols * 38 + 50);
+
+        // Semi-transparent tier plane
+        const plane = new THREE.Mesh(
+            new THREE.BoxGeometry(pSize, 3, pSize),
+            new THREE.MeshStandardMaterial({
+                color: tierY === 40 ? 0x1e3a8a : (tierY === 240 ? 0x065f46 : 0x4c1d95),
+                transparent: true,
+                opacity: 0.4
+            })
+        );
+        plane.position.set(0, tierY - 4, 0);
+        cityGroup.add(plane);
+
+        list.forEach((f, i) => {
+            const r = Math.floor(i / cols);
+            const c = i % cols;
+            const x = (c - cols / 2) * 36;
+            const z = (r - cols / 2) * 36;
+            const bh = Math.max(12, Math.min(100, (f.loc || 20) * 0.25));
+
+            const col = getLangColorHex(f.name);
+            const bldg = new THREE.Mesh(
+                new THREE.BoxGeometry(18, bh, 18),
+                new THREE.MeshStandardMaterial({ color: f.has_cycle ? 0xf85149 : col, roughness: 0.3 })
+            );
+            bldg.position.set(x, tierY + bh / 2, z);
+            bldg.userData = f;
+            cityGroup.add(bldg);
+            clickableObjects.push(bldg);
+            meshMap.set(f.id, bldg);
+        });
+    });
+
+    // Cross-layer calls
+    data.edges.filter(e => e.type === 'imports').slice(0, 250).forEach(e => {
+        const s = meshMap.get(e.source);
+        const t = meshMap.get(e.target);
+        if (s && t) {
+            const isViolation = s.position.y < t.position.y; // Lower layer importing upper!
+            drawArc(s.position, t.position, isViolation ? 0xf85149 : 0x38bdf8, beamGroup, isViolation ? 0.9 : 0.3, true);
+        }
+    });
+}
+
+/* 3. GALAXY MODE: Force-directed Topological Ring */
+function buildGalaxy(data) {
+    clearGroup(cityGroup);
+    clearGroup(beamGroup);
+    clearGroup(selectBeamGroup);
+    clickableObjects = [];
+    meshMap.clear();
+    flowCurves = [];
+
+    const files = data.nodes.filter(n => n.type === 'file');
+    const rad = 500;
     files.forEach((f, i) => {
         const phi = Math.acos(-1 + (2 * i) / Math.max(1, files.length));
         const theta = Math.sqrt(files.length * Math.PI) * phi;
         const x = rad * Math.cos(theta) * Math.sin(phi);
-        const y = rad * Math.sin(theta) * Math.sin(phi) + 250;
+        const y = rad * Math.sin(theta) * Math.sin(phi) + 300;
         const z = rad * Math.cos(phi);
 
-        const col = f.has_cycle ? 0xf85149 : (f.is_god ? 0xd29922 : 0x38bdf8);
+        const col = f.has_cycle ? 0xf85149 : getLangColorHex(f.name);
         const sp = new THREE.Mesh(
-            new THREE.SphereGeometry(f.has_cycle || f.is_god ? 10 : 6, 12, 12),
+            new THREE.SphereGeometry(f.has_cycle || f.is_god ? 11 : 7, 12, 12),
             new THREE.MeshStandardMaterial({ color: col, emissive: f.has_cycle ? col : 0x000000, emissiveIntensity: 0.3 })
         );
         sp.position.set(x, y, z);
@@ -686,25 +912,25 @@ function buildUniverse(data) {
         meshMap.set(f.id, sp);
     });
 
-    // Show sample dependency links
     data.edges.filter(e => e.type === 'imports').slice(0, 220).forEach(e => {
         const s = meshMap.get(e.source), t = meshMap.get(e.target);
-        if (s && t) drawArc(s.position, t.position, 0x38bdf8, beamGroup, 0.2);
+        if (s && t) drawArc(s.position, t.position, 0x38bdf8, beamGroup, 0.25, true);
     });
 }
 
+/* 4. FUNCTION MICRO MODE: Subroutines, Clones & Pass-throughs */
 function buildMicro(data) {
     clearGroup(cityGroup);
     clearGroup(beamGroup);
     clearGroup(selectBeamGroup);
     clickableObjects = [];
     meshMap.clear();
+    flowCurves = [];
 
-    // Prioritize functions with clones, pass-throughs, or high complexity so issues are always visible
     const fns = data.nodes
         .filter(n => n.type === 'function')
         .sort((a, b) => ((b.is_clone ? 1000 : 0) + b.complexity) - ((a.is_clone ? 1000 : 0) + a.complexity))
-        .slice(0, 500);
+        .slice(0, 600);
 
     const cols = Math.ceil(Math.sqrt(Math.max(1, fns.length)));
     fns.forEach((fn, i) => {
@@ -712,7 +938,7 @@ function buildMicro(data) {
         const c = i % cols;
         const x = (c - cols / 2) * 36;
         const z = (r - cols / 2) * 36;
-        const h = Math.max(6, Math.min(200, (fn.loc || 5) * 1.4));
+        const h = Math.max(6, Math.min(220, (fn.loc || 5) * 1.5));
 
         let col = 0x3fb950;
         if (fn.is_clone) col = 0xa371f7;
@@ -724,7 +950,7 @@ function buildMicro(data) {
             new THREE.MeshStandardMaterial({
                 color: col,
                 emissive: fn.is_clone ? 0xa371f7 : 0x000000,
-                emissiveIntensity: fn.is_clone ? 0.35 : 0
+                emissiveIntensity: fn.is_clone ? 0.4 : 0
             })
         );
         cyl.position.set(x, h / 2, z);
@@ -734,12 +960,11 @@ function buildMicro(data) {
         meshMap.set(fn.id, cyl);
     });
 
-    // Draw clone arcs between duplicate functions
     data.issues.filter(i => i.type === 'CODE_DUPLICATION').forEach(iss => {
         if (iss.involved_nodes.length >= 2) {
             const s = meshMap.get(iss.involved_nodes[0]);
             const t = meshMap.get(iss.involved_nodes[1]);
-            if (s && t) drawArc(s.position, t.position, 0xa371f7, beamGroup, 0.85);
+            if (s && t) drawArc(s.position, t.position, 0xa371f7, beamGroup, 0.9, true);
         }
     });
 }
@@ -750,7 +975,6 @@ function showInspector(u, mesh) {
 
     clearGroup(selectBeamGroup);
 
-    // Find outgoing & incoming dependencies
     const outDeps = [];
     const inDeps = [];
     appData.edges.forEach(e => {
@@ -759,7 +983,6 @@ function showInspector(u, mesh) {
         if (e.target === u.id && nodeById.has(e.source)) inDeps.push(nodeById.get(e.source));
     });
 
-    // Draw 3D selection arcs
     if (mesh) {
         outDeps.slice(0, 25).forEach(tNode => {
             const tm = resolveMeshForNode(tNode.id);
@@ -771,7 +994,6 @@ function showInspector(u, mesh) {
         });
     }
 
-    // Find issues involving this node (or functions inside this file)
     const relIssues = appData.issues.filter(iss =>
         iss.involved_nodes.some(nid => nid === u.id || (u.type === 'file' && nid.startsWith('fn:' + u.file_path + ':')))
     );
@@ -800,7 +1022,7 @@ function showInspector(u, mesh) {
         </div>
 
         <div class="dep-section">
-            <div class="dep-title">Tashqariga bog'liq (${outDeps.length})</div>
+            <div class="dep-title">Tashqariga chaqiradi (${outDeps.length})</div>
             <div class="dep-list">${chips(outDeps, '')}</div>
         </div>
         <div class="dep-section">
@@ -839,7 +1061,7 @@ function flyTo(x, y, z, target) {
 
 function resetCam() {
     clearGroup(selectBeamGroup);
-    flyTo(0, 650, 950, { x: 0, y: 0, z: 0 });
+    flyTo(0, 800, 1200, { x: 0, y: 0, z: 0 });
 }
 
 function flyNextCycle() {
@@ -865,63 +1087,104 @@ function setMode(m) {
     currentMode = m;
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
     if (m === 'CITY') document.getElementById('btnCity').classList.add('active');
-    else if (m === 'UNIVERSE') document.getElementById('btnUniverse').classList.add('active');
+    else if (m === 'LAYER') document.getElementById('btnLayer').classList.add('active');
+    else if (m === 'GALAXY') document.getElementById('btnGalaxy').classList.add('active');
     else document.getElementById('btnMicro').classList.add('active');
 
     if (m === 'CITY') buildCity(appData);
-    else if (m === 'UNIVERSE') buildUniverse(appData);
+    else if (m === 'LAYER') buildLayerFlow(appData);
+    else if (m === 'GALAXY') buildGalaxy(appData);
     else buildMicro(appData);
 }
 
-function setFilter(f, btn) {
-    currentFilter = f;
-    document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    renderIssuesList();
+function toggleFlowAnimation() {
+    flowAnimationActive = !flowAnimationActive;
+    const btn = document.getElementById('btnFlowToggle');
+    btn.classList.toggle('active', flowAnimationActive);
+    particlesGroup.visible = flowAnimationActive;
 }
 
-function renderIssuesList() {
+function filterByLang(lang, btn) {
+    selectedLang = lang;
+    document.querySelectorAll('.lang-chip').forEach(c => c.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    setMode(currentMode);
+    renderLeftTab();
+}
+
+function switchLeftTab(tab) {
+    activeLeftTab = tab;
+    document.getElementById('tabTree').classList.toggle('active', tab === 'TREE');
+    document.getElementById('tabIssues').classList.toggle('active', tab === 'ISSUES');
+    renderLeftTab();
+}
+
+function renderLeftTab() {
     if (!appData) return;
-    const list = document.getElementById('issuesList');
-    list.innerHTML = '';
+    const cont = document.getElementById('drawerContent');
+    cont.innerHTML = '';
 
     const q = searchQuery.toLowerCase();
-    const filtered = appData.issues.filter(iss => {
-        if (currentFilter === 'CIRCULAR_DEPENDENCY' && iss.type !== 'CIRCULAR_DEPENDENCY') return false;
-        if (currentFilter === 'CODE_DUPLICATION' && iss.type !== 'CODE_DUPLICATION') return false;
-        if (currentFilter === 'OTHER' && (iss.type === 'CIRCULAR_DEPENDENCY' || iss.type === 'CODE_DUPLICATION')) return false;
-        if (q && !(iss.title.toLowerCase().includes(q) || iss.description.toLowerCase().includes(q))) return false;
-        return true;
-    });
 
-    document.getElementById('issueCount').innerText = `${filtered.length} ta`;
-    filtered.forEach(iss => {
-        const item = document.createElement('div');
-        item.className = `issue-card ${iss.severity}`;
-        item.innerHTML = `
-            <div class="card-tag">${iss.type}</div>
-            <div class="card-title">${iss.title}</div>
-            <div class="card-desc">${iss.description}</div>
-        `;
-        item.onclick = () => {
-            document.querySelectorAll('.issue-card').forEach(c => c.classList.remove('active'));
-            item.classList.add('active');
-            if (iss.type === 'CODE_DUPLICATION' && currentMode !== 'MICRO') {
-                setMode('MICRO');
-            }
-            if (iss.involved_nodes.length > 0) {
-                const o = resolveMeshForNode(iss.involved_nodes[0]);
-                const n = nodeById.get(iss.involved_nodes[0]);
-                if (o && n) showInspector(n, o);
-                if (iss.involved_nodes.length >= 2) {
-                    const m1 = resolveMeshForNode(iss.involved_nodes[0]);
-                    const m2 = resolveMeshForNode(iss.involved_nodes[1]);
-                    if (m1 && m2) drawArc(m1.position, m2.position, 0xa371f7, selectBeamGroup, 1.0);
+    if (activeLeftTab === 'TREE') {
+        // Group files by module
+        const mods = {};
+        appData.nodes.filter(n => n.type === 'file').forEach(f => {
+            if (selectedLang !== 'ALL' && f.lang !== selectedLang) return;
+            if (q && !f.name.toLowerCase().includes(q) && !f.module.toLowerCase().includes(q)) return;
+            const m = f.module || 'root';
+            if (!mods[m]) mods[m] = [];
+            mods[m].push(f);
+        });
+
+        Object.keys(mods).sort().forEach(mName => {
+            const fList = mods[mName];
+            const mHead = document.createElement('div');
+            mHead.style.cssText = 'font-weight:700;color:#fff;font-size:12px;margin:8px 0 4px;padding:4px 6px;background:rgba(255,255,255,0.04);border-radius:4px;display:flex;justify-content:space-between;';
+            mHead.innerHTML = `<span>📁 ${mName}</span><span style="color:var(--muted);font-weight:normal;">${fList.length}</span>`;
+            cont.appendChild(mHead);
+
+            fList.slice(0, 40).forEach(f => {
+                const el = document.createElement('div');
+                el.className = 'tree-node';
+                const col = f.has_cycle ? 'var(--critical)' : (f.is_clone ? 'var(--info)' : 'var(--muted)');
+                el.innerHTML = `
+                    <span style="color:${col}">📄</span>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}</span>
+                    <span class="tree-badge" style="background:rgba(255,255,255,0.06);color:${getLangColorHex(f.name).toString(16)}">${f.lang.toUpperCase()}</span>
+                `;
+                el.onclick = () => {
+                    const m = resolveMeshForNode(f.id);
+                    if (m) showInspector(f, m);
+                };
+                cont.appendChild(el);
+            });
+        });
+    } else {
+        // Issues List
+        const issues = appData.issues.filter(iss => {
+            if (q && !iss.title.toLowerCase().includes(q) && !iss.description.toLowerCase().includes(q)) return false;
+            return true;
+        });
+
+        issues.forEach(iss => {
+            const item = document.createElement('div');
+            item.className = `issue-card ${iss.severity}`;
+            item.innerHTML = `
+                <div class="card-tag">${iss.type}</div>
+                <div class="card-title">${iss.title}</div>
+                <div class="card-desc">${iss.description}</div>
+            `;
+            item.onclick = () => {
+                if (iss.involved_nodes.length > 0) {
+                    const o = resolveMeshForNode(iss.involved_nodes[0]);
+                    const n = nodeById.get(iss.involved_nodes[0]);
+                    if (o && n) showInspector(n, o);
                 }
-            }
-        };
-        list.appendChild(item);
-    });
+            };
+            cont.appendChild(item);
+        });
+    }
 }
 
 function toggleLeftDrawer() {
@@ -945,21 +1208,15 @@ function loadData(d) {
     scoreEl.innerText = `${Math.round(d.health)} / 100`;
     scoreEl.style.color = d.health >= 70 ? 'var(--success)' : (d.health >= 45 ? 'var(--warning)' : 'var(--critical)');
 
-    renderIssuesList();
+    renderLeftTab();
     setMode(currentMode);
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene, camera);
 }
 
 initThree();
 
 document.getElementById('searchInput').addEventListener('input', e => {
     searchQuery = e.target.value;
-    renderIssuesList();
+    renderLeftTab();
 });
 
 if (window.ARCH_BINARY_B64) {
