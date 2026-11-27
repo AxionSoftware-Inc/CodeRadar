@@ -15,6 +15,7 @@
             --critical: #f85149;
             --warning: #d29922;
             --info: #a371f7;
+            --sprawl: #e3b341;
             --success: #3fb950;
             --cpp: #60a5fa;
             --dart: #00d2b8;
@@ -221,12 +222,55 @@
         .issue-card.CRITICAL { border-left: 3px solid var(--critical); }
         .issue-card.WARNING { border-left: 3px solid var(--warning); }
         .issue-card.INFO { border-left: 3px solid var(--info); }
+        .issue-card.ABSTRACTION_SPRAWL { border-left: 3px solid var(--sprawl); background: rgba(227, 179, 65, 0.05); }
         .card-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
         .CRITICAL .card-tag { color: var(--critical); }
         .WARNING .card-tag { color: var(--warning); }
         .INFO .card-tag { color: var(--info); }
+        .ABSTRACTION_SPRAWL .card-tag { color: var(--sprawl); }
         .card-title { font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .card-desc { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+
+        .llm-prompt-card {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(227, 179, 65, 0.08);
+            border: 1px dashed rgba(227, 179, 65, 0.45);
+            border-radius: 6px;
+        }
+        .llm-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--sprawl);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .llm-code-box {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 4px;
+            padding: 6px;
+            font-family: monospace;
+            font-size: 10px;
+            color: #d1d5db;
+            margin-top: 6px;
+            max-height: 110px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            user-select: text;
+        }
+        .btn-copy-prompt {
+            background: rgba(227, 179, 65, 0.2);
+            border: 1px solid var(--sprawl);
+            color: var(--sprawl);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-copy-prompt:hover { background: rgba(227, 179, 65, 0.4); color: #fff; }
 
         /* Right Inspector */
         .drawer-right {
@@ -350,6 +394,7 @@
 
     <div class="actions">
         <button class="btn-icon active" id="btnFlowToggle" onclick="toggleFlowAnimation()">🌊 Oqim Animatsiyasi</button>
+        <button class="btn-icon" onclick="flyNextSprawl()">✨ Sprawl Klaster</button>
         <button class="btn-icon" onclick="flyNextCycle()">⚡ Halqa</button>
         <button class="btn-icon" onclick="flyNextClone()">🧬 Dublikat</button>
         <button class="btn-icon" onclick="resetCam()">🎥 Umumiy</button>
@@ -398,6 +443,7 @@
     <div class="legend-item"><div class="legend-dot" style="background:var(--csharp)"></div>C# Plugins</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--critical)"></div>Sikl / Xato</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--info)"></div>Dublikat</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--sprawl)"></div>Sprawl Klaster</div>
 </div>
 
 <div id="tooltip"></div>
@@ -452,6 +498,7 @@ let nodeById = new Map();
 let raycaster, mouse;
 let cycleIndex = 0;
 let cloneIndex = 0;
+let sprawlIndex = 0;
 let flowCurves = [];
 
 // LANG_COLORS already defined above
@@ -524,7 +571,7 @@ function unpackBinary(arrayBuffer) {
             has_cycle: Boolean(flags & (1 << 0)),
             is_god: Boolean(flags & (1 << 1)),
             is_clone: Boolean(flags & (1 << 2)),
-            is_pass_through: Boolean(flags & (1 << 3)),
+            is_sprawl: Boolean(flags & (1 << 3)),
             is_layer_violation: Boolean(flags & (1 << 4)),
             is_orphan: Boolean(flags & (1 << 5))
         });
@@ -829,6 +876,7 @@ function buildCity(data) {
             if (f.has_cycle || f.is_layer_violation) color = 0xf85149;
             else if (f.is_god) color = 0xd29922;
             else if (f.is_clone) color = 0xa371f7;
+            else if (f.is_sprawl) color = 0xe3b341;
 
             const bldg = new THREE.Mesh(
                 new THREE.BoxGeometry(24, bh, 24),
@@ -836,8 +884,8 @@ function buildCity(data) {
                     color,
                     roughness: 0.25,
                     metalness: 0.5,
-                    emissive: (f.has_cycle || f.is_clone) ? color : 0x000000,
-                    emissiveIntensity: f.has_cycle ? 0.4 : (f.is_clone ? 0.3 : 0)
+                    emissive: (f.has_cycle || f.is_clone || f.is_sprawl) ? color : 0x000000,
+                    emissiveIntensity: f.has_cycle ? 0.4 : ((f.is_clone || f.is_sprawl) ? 0.35 : 0)
                 })
             );
             bldg.position.set(bx, bh / 2 + 6, bz);
@@ -861,6 +909,15 @@ function buildCity(data) {
             const s = resolveMeshForNode(iss.involved_nodes[i]);
             const t = resolveMeshForNode(iss.involved_nodes[i + 1]);
             if (s && t) drawArc(s.position, t.position, 0xf85149, beamGroup, 0.85, true);
+        }
+    });
+
+    // Sprawl cluster constellation arcs
+    data.issues.filter(i => i.type === 'ABSTRACTION_SPRAWL').slice(0, 8).forEach(iss => {
+        for (let i = 0; i + 1 < Math.min(iss.involved_nodes.length, 5); i++) {
+            const s = resolveMeshForNode(iss.involved_nodes[i]);
+            const t = resolveMeshForNode(iss.involved_nodes[i + 1]);
+            if (s && t) drawArc(s.position, t.position, 0xe3b341, beamGroup, 0.45, true);
         }
     });
 }
@@ -984,7 +1041,7 @@ function buildMicro(data) {
 
     const fns = data.nodes
         .filter(n => n.type === 'function')
-        .sort((a, b) => ((b.is_clone ? 1000 : 0) + b.complexity) - ((a.is_clone ? 1000 : 0) + a.complexity))
+        .sort((a, b) => (((b.is_clone || b.is_sprawl) ? 1000 : 0) + b.complexity) - (((a.is_clone || a.is_sprawl) ? 1000 : 0) + a.complexity))
         .slice(0, 600);
 
     const cols = Math.ceil(Math.sqrt(Math.max(1, fns.length)));
@@ -997,6 +1054,7 @@ function buildMicro(data) {
 
         let col = 0x3fb950;
         if (fn.is_clone) col = 0xa371f7;
+        else if (fn.is_sprawl) col = 0xe3b341;
         else if (fn.is_pass_through) col = 0x38bdf8;
         else if (fn.complexity > 10) col = 0xd29922;
 
@@ -1004,8 +1062,8 @@ function buildMicro(data) {
             new THREE.CylinderGeometry(6, 6, h, 8),
             new THREE.MeshStandardMaterial({
                 color: col,
-                emissive: fn.is_clone ? 0xa371f7 : 0x000000,
-                emissiveIntensity: fn.is_clone ? 0.4 : 0
+                emissive: fn.is_clone ? 0xa371f7 : (fn.is_sprawl ? 0xe3b341 : 0x000000),
+                emissiveIntensity: fn.is_clone ? 0.4 : (fn.is_sprawl ? 0.45 : 0)
             })
         );
         cyl.position.set(x, h / 2, z);
@@ -1020,6 +1078,14 @@ function buildMicro(data) {
             const s = meshMap.get(iss.involved_nodes[0]);
             const t = meshMap.get(iss.involved_nodes[1]);
             if (s && t) drawArc(s.position, t.position, 0xa371f7, beamGroup, 0.9, true);
+        }
+    });
+
+    data.issues.filter(i => i.type === 'ABSTRACTION_SPRAWL').forEach(iss => {
+        for (let i = 0; i + 1 < Math.min(iss.involved_nodes.length, 6); i++) {
+            const s = meshMap.get(iss.involved_nodes[i]);
+            const t = meshMap.get(iss.involved_nodes[i + 1]);
+            if (s && t) drawArc(s.position, t.position, 0xe3b341, beamGroup, 0.75, true);
         }
     });
 }
@@ -1119,13 +1185,122 @@ function resetCam() {
     flyTo(0, 1400, 2200, { x: 0, y: 0, z: 0 });
 }
 
+function copyLlmPrompt(btnId) {
+    const box = document.getElementById('llmPromptCode');
+    if (!box) return;
+    const text = box.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            const old = btn.innerText;
+            btn.innerText = 'Nusxalandi! ✓';
+            setTimeout(() => { btn.innerText = old; }, 2000);
+        }
+    });
+}
+
+function showSprawlInspector(iss) {
+    const drawer = document.getElementById('drawerRight');
+    drawer.classList.remove('collapsed');
+    clearGroup(selectBeamGroup);
+
+    const meshes = [];
+    iss.involved_nodes.forEach(nid => {
+        const m = resolveMeshForNode(nid);
+        if (m) meshes.push(m);
+    });
+
+    if (meshes.length >= 2) {
+        for (let i = 0; i < meshes.length; i++) {
+            for (let j = i + 1; j < Math.min(meshes.length, i + 4); j++) {
+                drawArc(meshes[i].position, meshes[j].position, 0xe3b341, selectBeamGroup, 0.95);
+            }
+        }
+    }
+
+    if (meshes.length > 0) {
+        let cx = 0, cy = 0, cz = 0;
+        meshes.forEach(m => { cx += m.position.x; cy += m.position.y; cz += m.position.z; });
+        cx /= meshes.length; cy /= meshes.length; cz /= meshes.length;
+        flyTo(cx, cy + 120, cz + 240, { x: cx, y: cy, z: cz });
+    }
+
+    const memberNodes = iss.involved_nodes.map(nid => nodeById.get(nid)).filter(Boolean);
+    const memberChips = memberNodes.slice(0, 18).map(n =>
+        `<span class="dep-chip" style="background:rgba(227,179,65,0.12);border-color:rgba(227,179,65,0.4);" onclick="jumpToNode('${n.id.replace(/'/g, "\\'")}')">${n.name}</span>`
+    ).join('') + (memberNodes.length > 18 ? `<span style="color:var(--muted);font-size:11px;">+${memberNodes.length - 18} ta</span>` : '');
+
+    const fnNamesList = memberNodes.map(n => `- ${n.name} (${n.file_path || n.module})`).join('\n');
+    const promptText = `Siz katta arxitektorsiz. Quyidagi ${memberNodes.length} ta funksiya bir xil domen vazifasini takroriy/qayta yozgan (Abstraction Sprawl / Semantic Clones):
+
+${fnNamesList}
+
+Muammo tahlili:
+${iss.description}
+
+Vazifa:
+1. Ushbu funksiyalar uchun 1 ta umumiy Parametrik Abstraksiya (masalan, Builder, Strategy yoki Shape/Geometry Factory) loyihalang.
+2. Har bir funksiya o'rniga bitta umumiy parametr/konfiguratsiya qanday uzatilishini toza kodda ko'rsating.`;
+
+    document.getElementById('inspectorBody').innerHTML = `
+        <div style="font-weight: 700; color: var(--sprawl); font-size: 14px;">✨ ${iss.title}</div>
+        <div style="color: var(--muted); font-size: 11px; margin-top: 2px;">Turi: ABSTRACTION_SPRAWL (AI Pattern Cloning)</div>
+
+        <div class="stat-grid">
+            <div class="stat-box"><div class="val" style="color:var(--sprawl);">${memberNodes.length}</div><div class="lbl">Funksiyalar soni</div></div>
+            <div class="stat-box"><div class="val" style="color:var(--sprawl);">${memberNodes.reduce((acc, x) => acc + (x.loc || 0), 0)}</div><div class="lbl">Jami qatorlar</div></div>
+        </div>
+
+        <div style="padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 11px; color: #ddd; margin: 8px 0; border-left: 2px solid var(--sprawl); line-height: 1.4;">
+            ${iss.description}
+        </div>
+
+        <div class="dep-section">
+            <div class="dep-title">Klasterdagi funksiyalar (${memberNodes.length})</div>
+            <div class="dep-list">${memberChips}</div>
+        </div>
+
+        <div class="llm-prompt-card">
+            <div class="llm-title">
+                <span>🤖 8B LLM Refactoring Prompt</span>
+                <button class="btn-copy-prompt" id="btnCopyPrompt" onclick="copyLlmPrompt('btnCopyPrompt')">Nusxalash 📋</button>
+            </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px;">Qwen2.5-Coder-7B yoki Llama-3-8B ga yuborish uchun tayyor prompt:</div>
+            <div class="llm-code-box" id="llmPromptCode">${promptText}</div>
+        </div>
+    `;
+}
+
+function selectIssue(iss) {
+    if (iss.type === 'ABSTRACTION_SPRAWL') {
+        if (currentMode !== 'MICRO') setMode('MICRO');
+        showSprawlInspector(iss);
+        return;
+    }
+
+    if (iss.type === 'CODE_DUPLICATION') {
+        if (currentMode !== 'MICRO') setMode('MICRO');
+        clearGroup(selectBeamGroup);
+        if (iss.involved_nodes.length >= 2) {
+            const m1 = resolveMeshForNode(iss.involved_nodes[0]);
+            const m2 = resolveMeshForNode(iss.involved_nodes[1]);
+            if (m1 && m2) drawArc(m1.position, m2.position, 0xa371f7, selectBeamGroup, 0.95);
+        }
+    }
+
+    if (iss.involved_nodes.length > 0) {
+        const o = resolveMeshForNode(iss.involved_nodes[0]);
+        const n = nodeById.get(iss.involved_nodes[0]);
+        if (o && n) showInspector(n, o);
+    }
+}
+
 function flyNextCycle() {
     const cycles = appData.issues.filter(i => i.type === 'CIRCULAR_DEPENDENCY');
     if (cycles.length === 0) return;
     const c = cycles[cycleIndex % cycles.length];
     cycleIndex++;
-    const o = resolveMeshForNode(c.involved_nodes[0]);
-    if (o) showInspector(o.userData, o);
+    selectIssue(c);
 }
 
 function flyNextClone() {
@@ -1133,9 +1308,15 @@ function flyNextClone() {
     if (clones.length === 0) return;
     const c = clones[cloneIndex % clones.length];
     cloneIndex++;
-    if (currentMode !== 'MICRO') setMode('MICRO');
-    const o = resolveMeshForNode(c.involved_nodes[0]);
-    if (o) showInspector(o.userData, o);
+    selectIssue(c);
+}
+
+function flyNextSprawl() {
+    const sprawls = appData.issues.filter(i => i.type === 'ABSTRACTION_SPRAWL');
+    if (sprawls.length === 0) return;
+    const s = sprawls[sprawlIndex % sprawls.length];
+    sprawlIndex++;
+    selectIssue(s);
 }
 
 function setMode(m) {
@@ -1224,19 +1405,13 @@ function renderLeftTab() {
 
         issues.forEach(iss => {
             const item = document.createElement('div');
-            item.className = `issue-card ${iss.severity}`;
+            item.className = `issue-card ${iss.severity} ${iss.type}`;
             item.innerHTML = `
                 <div class="card-tag">${iss.type}</div>
                 <div class="card-title">${iss.title}</div>
                 <div class="card-desc">${iss.description}</div>
             `;
-            item.onclick = () => {
-                if (iss.involved_nodes.length > 0) {
-                    const o = resolveMeshForNode(iss.involved_nodes[0]);
-                    const n = nodeById.get(iss.involved_nodes[0]);
-                    if (o && n) showInspector(n, o);
-                }
-            };
+            item.onclick = () => selectIssue(iss);
             cont.appendChild(item);
         });
     }

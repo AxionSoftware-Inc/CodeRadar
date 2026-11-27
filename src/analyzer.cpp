@@ -50,6 +50,58 @@ double cosine_behavior(const std::array<double, 8>& a, const std::array<double, 
     return dot / (std::sqrt(ma) * std::sqrt(mb));
 }
 
+std::vector<std::string> split_name_subtokens(const std::string& name) {
+    std::vector<std::string> tokens;
+    std::string curr;
+    for (size_t i = 0; i < name.size(); ++i) {
+        char c = name[i];
+        if (c == '_' || c == '-' || c == ':') {
+            if (curr.size() >= 2) tokens.push_back(curr);
+            curr.clear();
+            continue;
+        }
+        if (std::isupper(static_cast<unsigned char>(c)) && !curr.empty() &&
+            std::islower(static_cast<unsigned char>(curr.back()))) {
+            if (curr.size() >= 2) tokens.push_back(curr);
+            curr.clear();
+        }
+        curr.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    if (curr.size() >= 2) tokens.push_back(curr);
+    return tokens;
+}
+
+double jaccard_subtokens(const std::unordered_set<std::string>& a, const std::unordered_set<std::string>& b) {
+    if (a.empty() || b.empty()) return 0.0;
+    size_t inter = 0;
+    const auto& small_s = (a.size() < b.size()) ? a : b;
+    const auto& large_s = (a.size() < b.size()) ? b : a;
+    for (const auto& t : small_s) {
+        if (large_s.count(t)) inter++;
+    }
+    if (inter == 0) return 0.0;
+    return static_cast<double>(inter) / static_cast<double>(a.size() + b.size() - inter);
+}
+
+struct DisjointSet {
+    std::vector<size_t> parent;
+    explicit DisjointSet(size_t n) : parent(n) {
+        for (size_t i = 0; i < n; ++i) parent[i] = i;
+    }
+    size_t find(size_t x) {
+        while (parent[x] != x) {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        return x;
+    }
+    void unite(size_t a, size_t b) {
+        a = find(a);
+        b = find(b);
+        if (a != b) parent[b] = a;
+    }
+};
+
 } // namespace
 
 void ArchitectureAnalyzer::calculate_coupling_and_instability(Graph& graph) {
@@ -377,10 +429,14 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
         double tfidf_norm = 0.0;
         std::unordered_map<std::string, int> cfg_3grams;
         double cfg_norm = 0.0;
+        std::unordered_map<std::string, double> api_tfidf;
+        double api_norm = 0.0;
+        std::unordered_set<std::string> name_subtokens;
     };
 
     std::vector<FnFeat> fns;
     std::unordered_map<std::string, int> df;
+    std::unordered_map<std::string, int> api_df;
 
     for (const auto& pair : graph.nodes) {
         if (pair.second.type == "function" && pair.second.loc >= 6 && pair.second.norm_token_vector.size() >= 5) {
@@ -390,6 +446,11 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
             for (const auto& kv : pair.second.norm_token_vector) {
                 df[kv.first]++;
             }
+            for (const auto& api : pair.second.called_identifiers) {
+                api_df[api]++;
+            }
+            auto subs = split_name_subtokens(pair.second.name);
+            f.name_subtokens.insert(subs.begin(), subs.end());
             fns.push_back(std::move(f));
         }
     }
@@ -397,7 +458,7 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
     size_t N = fns.size();
     if (N < 2) return;
 
-    // Precompute TF-IDF vectors and CFG 3-gram vectors
+    // Precompute TF-IDF vectors, API/Side-effect TF-IDF vectors, and CFG 3-gram vectors
     for (auto& f : fns) {
         double sum_sq = 0.0;
         for (const auto& kv : f.node->norm_token_vector) {
@@ -407,6 +468,14 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
             sum_sq += w * w;
         }
         f.tfidf_norm = std::sqrt(sum_sq);
+
+        double api_sq = 0.0;
+        for (const auto& api : f.node->called_identifiers) {
+            double idf = std::log((static_cast<double>(N) + 1.0) / (static_cast<double>(api_df[api]) + 1.0)) + 1.0;
+            f.api_tfidf[api] = idf;
+            api_sq += idf * idf;
+        }
+        f.api_norm = std::sqrt(api_sq);
 
         const auto& seq = f.node->cfg_sequence;
         if (seq.size() >= 3) {
@@ -428,10 +497,13 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
         double prob;
         double tfidf_sim;
         double cfg_sim;
+        double api_sim;
         std::string kind;
     };
 
     std::vector<CloneCandidate> candidates;
+    DisjointSet dsu(N);
+    std::vector<std::vector<double>> cluster_edge_probs(N);
 
     for (size_t i = 0; i < N; ++i) {
         const auto& f1 = fns[i];
@@ -439,49 +511,188 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
 
         for (size_t j = i + 1; j < N; ++j) {
             const auto& f2 = fns[j];
-            if (f1.node->file_path == f2.node->file_path) continue;
 
-            // Exact normalized hash match (Type-1 / Type-2)
+            // Exact normalized hash match (Type-1 / Type-2), including same-file duplicates
             if (f1.node->exact_hash != 0 && f1.node->exact_hash == f2.node->exact_hash) {
-                candidates.push_back({i, j, 0.99, 1.0, 1.0, "Type-1/2: Bir xil funksiya"});
+                candidates.push_back({i, j, 0.99, 1.0, 1.0, 1.0, "Type-1/2: Bir xil funksiya"});
+                dsu.unite(i, j);
+                cluster_edge_probs[i].push_back(0.99);
                 continue;
             }
 
             double sz2 = static_cast<double>(f2.node->norm_token_vector.size());
-            if (std::min(sz1, sz2) / std::max(sz1, sz2) < 0.60) continue;
-
+            double sz_ratio = std::min(sz1, sz2) / std::max(sz1, sz2);
             double loc_ratio = static_cast<double>(std::min(f1.node->loc, f2.node->loc)) /
                                static_cast<double>(std::max(f1.node->loc, f2.node->loc));
-            if (loc_ratio < 0.50) continue;
+            if (sz_ratio < 0.40 || loc_ratio < 0.35) continue;
 
             double sim_tfidf = cosine_sparse_double(f1.tfidf, f1.tfidf_norm, f2.tfidf, f2.tfidf_norm);
-            if (sim_tfidf < 0.50) continue; // Fast prune
+            double sim_api = (f1.api_norm > 0.0 && f2.api_norm > 0.0)
+                ? cosine_sparse_double(f1.api_tfidf, f1.api_norm, f2.api_tfidf, f2.api_norm)
+                : 0.0;
+
+            // Dual-gate fast prune: keep if either syntactic structure OR side-effect API footprint is similar
+            if (sim_tfidf < 0.42 && sim_api < 0.45) continue;
 
             double sim_behav = cosine_behavior(f1.node->behavior_profile, f2.node->behavior_profile);
-            double sim_cfg = 0.0;
-            double prob = 0.0;
+            double sim_cfg = (f1.cfg_norm > 0.0 && f2.cfg_norm > 0.0)
+                ? cosine_sparse_int(f1.cfg_3grams, f1.cfg_norm, f2.cfg_3grams, f2.cfg_norm)
+                : 0.0;
+            double sim_name = jaccard_subtokens(f1.name_subtokens, f2.name_subtokens);
 
+            double base_prob = 0.0;
             if (f1.cfg_norm > 0.0 && f2.cfg_norm > 0.0) {
-                sim_cfg = cosine_sparse_int(f1.cfg_3grams, f1.cfg_norm, f2.cfg_3grams, f2.cfg_norm);
-                prob = 0.45 * sim_tfidf + 0.35 * sim_cfg + 0.20 * sim_behav;
+                if (f1.api_norm > 0.0 && f2.api_norm > 0.0) {
+                    base_prob = 0.32 * sim_tfidf + 0.25 * sim_cfg + 0.28 * sim_api + 0.15 * sim_behav;
+                } else {
+                    base_prob = 0.45 * sim_tfidf + 0.35 * sim_cfg + 0.20 * sim_behav;
+                }
             } else {
-                prob = 0.70 * sim_tfidf + 0.30 * sim_behav;
+                if (f1.api_norm > 0.0 && f2.api_norm > 0.0) {
+                    base_prob = 0.40 * sim_tfidf + 0.40 * sim_api + 0.20 * sim_behav;
+                } else {
+                    base_prob = 0.70 * sim_tfidf + 0.30 * sim_behav;
+                }
             }
 
+            double prob = std::min(0.99, base_prob + 0.10 * sim_name);
+
             // Same function name across different files is a strong signal of accidental re-implementation
-            if (f1.node->name == f2.node->name) {
-                prob = std::min(0.98, prob + 0.08);
+            if (f1.node->name == f2.node->name && f1.node->file_path != f2.node->file_path) {
+                prob = std::min(0.98, prob + 0.06);
+            }
+
+            // Connect in Abstraction Sprawl Similarity Graph if strongly similar OR semantic API family
+            bool is_sprawl_edge = (prob >= 0.72) ||
+                (sim_api >= 0.58 && sim_behav >= 0.80 && sim_name >= 0.25);
+            if (is_sprawl_edge) {
+                dsu.unite(i, j);
+                cluster_edge_probs[i].push_back(prob);
             }
 
             if (prob >= threshold) {
                 std::string kind = (sim_tfidf >= 0.85)
                     ? "Type-3: O'zgartirilgan nusxa"
                     : "Type-4: Ehtimoliy mantiqiy o'xshashlik";
-                candidates.push_back({i, j, prob, sim_tfidf, sim_cfg, kind});
+                candidates.push_back({i, j, prob, sim_tfidf, sim_cfg, sim_api, kind});
             }
         }
     }
 
+    // 1. Emit Abstraction Sprawl (Pattern Family) issues for clusters of >= 3 related functions
+    std::unordered_map<size_t, std::vector<size_t>> clusters;
+    for (size_t i = 0; i < N; ++i) {
+        clusters[dsu.find(i)].push_back(i);
+    }
+
+    struct SprawlCluster {
+        std::vector<size_t> members;
+        int total_loc = 0;
+        double avg_sim = 0.0;
+        std::string dominant_intent;
+        std::vector<std::string> shared_apis;
+    };
+    std::vector<SprawlCluster> sprawl_clusters;
+
+    for (const auto& kv : clusters) {
+        const auto& members = kv.second;
+        if (members.size() < 3) continue;
+
+        SprawlCluster sc;
+        sc.members = members;
+        std::unordered_map<std::string, int> intent_freq;
+        std::unordered_map<std::string, int> api_freq;
+        double prob_sum = 0.0;
+        size_t prob_cnt = 0;
+
+        for (size_t idx : members) {
+            sc.total_loc += fns[idx].node->loc;
+            for (const auto& tok : fns[idx].name_subtokens) {
+                intent_freq[tok]++;
+            }
+            for (const auto& api : fns[idx].node->called_identifiers) {
+                api_freq[api]++;
+            }
+            for (double p : cluster_edge_probs[idx]) {
+                prob_sum += p;
+                prob_cnt++;
+            }
+        }
+        sc.avg_sim = prob_cnt > 0 ? (prob_sum / static_cast<double>(prob_cnt)) : 0.72;
+
+        // Find dominant naming intent
+        int best_intent_cnt = 0;
+        for (const auto& ikv : intent_freq) {
+            if (ikv.second > best_intent_cnt) {
+                best_intent_cnt = ikv.second;
+                sc.dominant_intent = ikv.first;
+            }
+        }
+        if (sc.dominant_intent.empty()) sc.dominant_intent = "pattern";
+
+        // Find top shared domain APIs (present in >= 40% of cluster members, sorted by IDF-weighted frequency)
+        std::vector<std::pair<double, std::string>> ranked_apis;
+        int min_support = std::max(2, static_cast<int>(members.size() * 0.4));
+        for (const auto& akv : api_freq) {
+            if (akv.second >= min_support) {
+                double idf = std::log((static_cast<double>(N) + 1.0) / (static_cast<double>(api_df[akv.first]) + 1.0)) + 1.0;
+                ranked_apis.push_back({static_cast<double>(akv.second) * idf, akv.first});
+            }
+        }
+        std::sort(ranked_apis.begin(), ranked_apis.end(), [](const auto& a, const auto& b) {
+            return a.first > b.first;
+        });
+        for (size_t k = 0; k < std::min(ranked_apis.size(), static_cast<size_t>(4)); ++k) {
+            sc.shared_apis.push_back(ranked_apis[k].second);
+        }
+
+        sprawl_clusters.push_back(std::move(sc));
+    }
+
+    std::sort(sprawl_clusters.begin(), sprawl_clusters.end(), [](const SprawlCluster& a, const SprawlCluster& b) {
+        if (a.members.size() != b.members.size()) return a.members.size() > b.members.size();
+        return a.total_loc > b.total_loc;
+    });
+
+    int sprawl_count = 0;
+    for (const auto& sc : sprawl_clusters) {
+        sprawl_count++;
+        if (sprawl_count > 15) break;
+
+        CodeIssue issue;
+        issue.id = "SPRAWL_" + std::to_string(sprawl_count);
+        issue.type = "ABSTRACTION_SPRAWL";
+        issue.severity = (sc.members.size() >= 6 || sc.total_loc >= 200) ? IssueSeverity::CRITICAL : IssueSeverity::WARNING;
+        issue.title = "Abstraksiya Yetishmovchiligi: '" + sc.dominant_intent + "*' oilasi (" +
+                      std::to_string(sc.members.size()) + " ta funksiya, " + std::to_string(sc.total_loc) + " qator)";
+
+        std::stringstream ss;
+        ss << "Bir xil arxitektura rolidagi funksiyalar: ";
+        for (size_t k = 0; k < std::min(sc.members.size(), static_cast<size_t>(4)); ++k) {
+            ss << "'" << fns[sc.members[k]].node->name << "'";
+            if (k + 1 < std::min(sc.members.size(), static_cast<size_t>(4))) ss << ", ";
+        }
+        if (sc.members.size() > 4) ss << " va yana " << (sc.members.size() - 4) << " ta";
+        if (!sc.shared_apis.empty()) {
+            ss << ". Umumiy API izi: [";
+            for (size_t k = 0; k < sc.shared_apis.size(); ++k) {
+                ss << sc.shared_apis[k] << (k + 1 < sc.shared_apis.size() ? ", " : "");
+            }
+            ss << "]";
+        }
+        ss << " (O'xshashlik: " << static_cast<int>(std::round(sc.avg_sim * 100.0)) << "%).";
+
+        issue.description = ss.str();
+        issue.recommendation = "Parametric Engine / Strategy Pattern: Ushbu " + std::to_string(sc.members.size()) +
+                               " ta funksiyani bitta umumiy konfiguratsion abstraksiyaga birlashtiring (LLM refactoring uchun tayyor klaster).";
+        for (size_t idx : sc.members) {
+            issue.involved_nodes.push_back(fns[idx].id);
+        }
+        issue.score = std::min(22.0, 5.0 + static_cast<double>(sc.members.size()) * 1.5);
+        issues.push_back(issue);
+    }
+
+    // 2. Emit top pairwise clones
     std::sort(candidates.begin(), candidates.end(), [](const CloneCandidate& a, const CloneCandidate& b) {
         return a.prob > b.prob;
     });
@@ -509,8 +720,9 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
         std::stringstream ss;
         ss << "'" << fn1->name << "' (" << fn1->file_path << ":" << fn1->line_start
            << ") va '" << fn2->name << "' (" << fn2->file_path << ":" << fn2->line_start
-           << ") [TF-IDF: " << static_cast<int>(c.tfidf_sim * 100) << "%, CFG: "
-           << static_cast<int>(c.cfg_sim * 100) << "%].";
+           << ") [TF-IDF: " << static_cast<int>(c.tfidf_sim * 100)
+           << "%, CFG: " << static_cast<int>(c.cfg_sim * 100)
+           << "%, API: " << static_cast<int>(c.api_sim * 100) << "%].";
         issue.description = ss.str();
         issue.recommendation = "DRY: Ikkala funksiyani bitta umumiy helper/utility funksiyaga birlashtiring.";
         issue.involved_nodes.push_back(fn1->id);

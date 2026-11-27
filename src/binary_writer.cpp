@@ -89,6 +89,7 @@ bool BinaryWriter::write_binary(const std::string& bin_path, const std::string& 
         if (iss.type == "CIRCULAR_DEPENDENCY") flag_bit = (1 << 0);
         else if (iss.type == "GOD_OBJECT") flag_bit = (1 << 1);
         else if (iss.type == "CODE_DUPLICATION") flag_bit = (1 << 2);
+        else if (iss.type == "ABSTRACTION_SPRAWL") flag_bit = (1 << 3);
         else if (iss.type == "LAYER_VIOLATION") flag_bit = (1 << 4);
         else if (iss.type == "ORPHAN_CODE") flag_bit = (1 << 5);
 

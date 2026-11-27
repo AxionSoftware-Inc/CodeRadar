@@ -1,9 +1,9 @@
 {
   "summary": {
-    "health_score": 10,
+    "health_score": 17,
     "total_nodes": 22,
     "total_edges": 42,
-    "total_issues": 10
+    "total_issues": 7
   },
   "issues": [
     {
@@ -38,45 +38,18 @@
       "type": "CODE_DUPLICATION",
       "severity": "CRITICAL",
       "title": "Type-1/2: Bir xil funksiya (99%)",
-      "description": "'compute_tax_total' (billing/tax_calculator.hpp:4) va 'calculate_order_vat' (orders/order_vat.hpp:5) [TF-IDF: 100%, CFG: 100%].",
+      "description": "'compute_tax_total' (billing/tax_calculator.hpp:4) va 'calculate_order_vat' (orders/order_vat.hpp:5) [TF-IDF: 100%, CFG: 100%, API: 100%].",
       "recommendation": "DRY: Ikkala funksiyani bitta umumiy helper/utility funksiyaga birlashtiring.",
       "involved_nodes": ["fn:billing/tax_calculator.hpp:compute_tax_total", "fn:orders/order_vat.hpp:calculate_order_vat"]
     },
     {
       "id": "CLONE_2",
       "type": "CODE_DUPLICATION",
-      "severity": "CRITICAL",
-      "title": "Type-3: O'zgartirilgan nusxa (94%)",
-      "description": "'check_stock' (inventory/inventory_service.hpp:7) va 'send_alert' (notification/notification_service.hpp:7) [TF-IDF: 86%, CFG: 99%].",
-      "recommendation": "DRY: Ikkala funksiyani bitta umumiy helper/utility funksiyaga birlashtiring.",
-      "involved_nodes": ["fn:inventory/inventory_service.hpp:check_stock", "fn:notification/notification_service.hpp:send_alert"]
-    },
-    {
-      "id": "CLONE_3",
-      "type": "CODE_DUPLICATION",
       "severity": "WARNING",
-      "title": "Type-4: Ehtimoliy mantiqiy o'xshashlik (85%)",
-      "description": "'manage_global_cache' (utils/super_god_manager.hpp:26) va 'retry_failed_order' (orders/order_service.hpp:11) [TF-IDF: 65%, CFG: 100%].",
+      "title": "Type-4: Ehtimoliy mantiqiy o'xshashlik (83%)",
+      "description": "'handle_security_audit' (utils/super_god_manager.hpp:18) va 'validate_database_pool' (utils/super_god_manager.hpp:32) [TF-IDF: 73%, CFG: 65%, API: 100%].",
       "recommendation": "DRY: Ikkala funksiyani bitta umumiy helper/utility funksiyaga birlashtiring.",
-      "involved_nodes": ["fn:utils/super_god_manager.hpp:manage_global_cache", "fn:orders/order_service.hpp:retry_failed_order"]
-    },
-    {
-      "id": "CLONE_4",
-      "type": "CODE_DUPLICATION",
-      "severity": "WARNING",
-      "title": "Type-4: Ehtimoliy mantiqiy o'xshashlik (81%)",
-      "description": "'check_stock' (inventory/inventory_service.hpp:7) va 'retry_failed_order' (orders/order_service.hpp:11) [TF-IDF: 82%, CFG: 70%].",
-      "recommendation": "DRY: Ikkala funksiyani bitta umumiy helper/utility funksiyaga birlashtiring.",
-      "involved_nodes": ["fn:inventory/inventory_service.hpp:check_stock", "fn:orders/order_service.hpp:retry_failed_order"]
-    },
-    {
-      "id": "CLONE_5",
-      "type": "CODE_DUPLICATION",
-      "severity": "WARNING",
-      "title": "Type-4: Ehtimoliy mantiqiy o'xshashlik (80%)",
-      "description": "'retry_failed_order' (orders/order_service.hpp:11) va 'send_alert' (notification/notification_service.hpp:7) [TF-IDF: 79%, CFG: 70%].",
-      "recommendation": "DRY: Ikkala funksiyani bitta umumiy helper/utility funksiyaga birlashtiring.",
-      "involved_nodes": ["fn:orders/order_service.hpp:retry_failed_order", "fn:notification/notification_service.hpp:send_alert"]
+      "involved_nodes": ["fn:utils/super_god_manager.hpp:handle_security_audit", "fn:utils/super_god_manager.hpp:validate_database_pool"]
     },
     {
       "id": "WRAPPER_1",
