@@ -1,0 +1,11 @@
+# Compiled binaries & object files
+arch_radar
+*.o
+*.out
+
+# External test codebase & large generated JSON dumps
+BIM-Mobile/
+bim_analysis.json
+analysis_result.json
+web/analysis_result.json
+web/bim_analysis.json
