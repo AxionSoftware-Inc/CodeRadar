@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ViewMode } from '@/lib/types';
+import { ViewMode, SmellFilter } from '@/lib/types';
 import { 
   Building2, 
   Layers, 
@@ -16,7 +16,8 @@ import {
   Waves,
   Zap,
   Flame,
-  FileCode2
+  FileCode2,
+  Sliders
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -27,11 +28,14 @@ interface HeaderProps {
   onToggleFlow: () => void;
   blastSimActive: boolean;
   onToggleBlastSim: () => void;
+  smellFilter: SmellFilter;
+  onSmellFilterChange: (filter: SmellFilter) => void;
   onNextSprawl: () => void;
   onNextCycle: () => void;
   onNextClone: () => void;
   onNextGod: () => void;
   onResetCam: () => void;
+  onOpenSettings: () => void;
   onFileUpload: (file: File) => void;
   datasetName: string;
   onSelectDataset: (name: 'bim' | 'demo') => void;
@@ -45,11 +49,14 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleFlow,
   blastSimActive,
   onToggleBlastSim,
+  smellFilter,
+  onSmellFilterChange,
   onNextSprawl,
   onNextCycle,
   onNextClone,
   onNextGod,
   onResetCam,
+  onOpenSettings,
   onFileUpload,
   datasetName,
   onSelectDataset,
@@ -183,6 +190,29 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Quick Actions & Toggles */}
       <div className="flex items-center gap-1.5">
+        {/* Smell Spotlight Filter */}
+        <div className="hidden 2xl:flex items-center gap-0.5 bg-black/40 border border-border/60 p-0.5 rounded-lg text-[10px]">
+          {(
+            [
+              { id: 'ALL', label: 'Barchasi', active: 'bg-white/15 text-white' },
+              { id: 'CYCLES', label: 'Sikllar', active: 'bg-rose-500/25 text-rose-300 border border-rose-500/40' },
+              { id: 'CLONES', label: 'Klonlar', active: 'bg-purple-500/25 text-purple-300 border border-purple-500/40' },
+              { id: 'HOTSPOTS', label: 'Hotspot', active: 'bg-orange-500/25 text-orange-300 border border-orange-500/40' },
+            ] as const
+          ).map((f) => (
+            <button
+              key={f.id}
+              onClick={() => onSmellFilterChange(f.id)}
+              className={`px-2 py-0.5 rounded font-medium transition-all ${
+                smellFilter === f.id ? f.active : 'text-muted hover:text-white'
+              }`}
+              title={`Spotlight: ${f.label}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
         {/* Blast Radius Impact Simulator Toggle */}
         <button
           onClick={onToggleBlastSim}
@@ -236,7 +266,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
           <button
             onClick={onNextGod}
-            title="Navbatdagi God Object ga uchish"
+            title="Navbatdagi Markaziy Tugunga (Hub) uchish"
             className="p-1 rounded text-yellow-300 hover:bg-yellow-500/20 transition-colors"
           >
             <Zap className="w-3.5 h-3.5" />
@@ -250,6 +280,15 @@ export const Header: React.FC<HeaderProps> = ({
           className="p-1.5 rounded-lg border border-border bg-black/30 text-muted hover:border-white/40 hover:text-white transition-all"
         >
           <Maximize2 className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Viewport & Grouping Settings */}
+        <button
+          onClick={onOpenSettings}
+          title="Viewport, Modul va Tahlil Sozlamalari"
+          className="p-1.5 rounded-lg border border-border bg-black/30 text-muted hover:border-primary/60 hover:text-primary transition-all"
+        >
+          <Sliders className="w-3.5 h-3.5" />
         </button>
 
         {/* Upload Custom .bin / .json */}

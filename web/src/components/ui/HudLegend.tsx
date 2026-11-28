@@ -23,7 +23,7 @@ export const HudLegend: React.FC = () => {
       </div>
       <div className="flex items-center gap-1.5 text-[11px] text-muted">
         <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-        <span className="text-amber-400 font-medium">God Object</span>
+        <span className="text-amber-400 font-medium">Markaziy Tugun (Hub)</span>
       </div>
       <div className="flex items-center gap-1.5 text-[11px] text-amber-300 font-medium">
         <div className="w-2.5 h-2.5 rounded-full bg-amber-300 animate-pulse" />

@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { AppData, CodeNode, CodeIssue, ViewMode } from '@/lib/types';
+import { AppData, CodeNode, CodeIssue, ViewMode, SmellFilter, ViewportSettings } from '@/lib/types';
 import { unpackBinary } from '@/lib/binaryParser';
 import { Header } from '@/components/ui/Header';
 import { LeftDrawer } from '@/components/ui/LeftDrawer';
 import { RightInspector } from '@/components/ui/RightInspector';
 import { HudLegend } from '@/components/ui/HudLegend';
 import { DsmMatrix } from '@/components/viewport/DsmMatrix';
+import { SettingsModal } from '@/components/ui/SettingsModal';
 
 // Dynamic import ThreeViewport with ssr: false so WebGL only runs client-side
 const ThreeViewport = dynamic(
@@ -21,6 +22,15 @@ export default function HomePage() {
   const [datasetName, setDatasetName] = useState<string>('BIM-Mobile');
   const [mode, setMode] = useState<ViewMode>('CITY');
   const [selectedLang, setSelectedLang] = useState<string>('ALL');
+  const [smellFilter, setSmellFilter] = useState<SmellFilter>('ALL');
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [settings, setSettings] = useState<ViewportSettings>({
+    groupBy: 'MODULE',
+    heightMetric: 'LOC',
+    fogEnabled: false,
+    showLabels: true,
+    lodEnabled: true,
+  });
   const [flowActive, setFlowActive] = useState<boolean>(true);
   const [blastSimActive, setBlastSimActive] = useState<boolean>(false);
 
@@ -238,11 +248,14 @@ export default function HomePage() {
         onToggleFlow={() => setFlowActive((prev) => !prev)}
         blastSimActive={blastSimActive}
         onToggleBlastSim={() => setBlastSimActive((prev) => !prev)}
+        smellFilter={smellFilter}
+        onSmellFilterChange={setSmellFilter}
         onNextSprawl={handleNextSprawl}
         onNextCycle={handleNextCycle}
         onNextClone={handleNextClone}
         onNextGod={handleNextGod}
         onResetCam={() => viewportRef.current?.resetCam()}
+        onOpenSettings={() => setSettingsOpen(true)}
         onFileUpload={handleFileUpload}
         datasetName={datasetName}
         onSelectDataset={loadDataset}
@@ -266,6 +279,8 @@ export default function HomePage() {
           data={data}
           mode={mode}
           selectedLang={selectedLang}
+          smellFilter={smellFilter}
+          settings={settings}
           flowActive={flowActive}
           selectedNode={selectedNode}
           selectedSprawl={selectedSprawl}
@@ -293,6 +308,14 @@ export default function HomePage() {
 
       {/* Bottom Center Floating HUD Legend (only in 3D modes) */}
       {mode !== 'DSM' && <HudLegend />}
+
+      {/* Viewport Settings Modal */}
+      <SettingsModal
+        isOpen={settingsOpen}
+        settings={settings}
+        onChange={setSettings}
+        onClose={() => setSettingsOpen(false)}
+      />
     </main>
   );
 }

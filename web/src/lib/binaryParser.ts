@@ -63,6 +63,11 @@ export function unpackBinary(arrayBuffer: ArrayBuffer): AppData {
     }
     const inst = view.getFloat32(off, true); off += 4;
     const pr = view.getFloat32(off, true); off += 4;
+    let runtimeHeat = 0, hotspotScore = 0;
+    if (version >= 4) {
+      runtimeHeat = view.getFloat32(off, true); off += 4;
+      hotspotScore = view.getFloat32(off, true); off += 4;
+    }
     const flags = view.getUint8(off); off += 1;
 
     const name = getStr(nameOff);
@@ -82,6 +87,8 @@ export function unpackBinary(arrayBuffer: ArrayBuffer): AppData {
       blast_radius: blastRadius,
       instability: inst,
       pagerank: pr,
+      runtime_heat: runtimeHeat,
+      hotspot_score: hotspotScore,
       has_cycle: Boolean(flags & (1 << 0)),
       is_god: Boolean(flags & (1 << 1)),
       is_clone: Boolean(flags & (1 << 2)),

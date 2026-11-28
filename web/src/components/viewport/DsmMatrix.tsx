@@ -101,13 +101,13 @@ export const DsmMatrix: React.FC<DsmMatrixProps> = ({ data, onSelectNode }) => {
   if (!data) return null;
 
   return (
-    <div className="relative w-full h-full bg-[#07090e] flex flex-col overflow-hidden select-none">
+    <div className="relative w-full h-full bg-[#07090e] flex flex-col overflow-hidden select-none pt-[74px] pl-[356px]">
       {/* Top Matrix Controls */}
       <div className="h-12 border-b border-border bg-panel/60 backdrop-blur-md px-4 flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-white flex items-center gap-1.5 uppercase tracking-wide">
             <Layers className="w-4 h-4 text-primary" />
-            Dependency Structure Matrix (DSM)
+            DSM (Qator ➔ Ustun)
           </span>
           <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded border border-border">
             <button
@@ -116,7 +116,7 @@ export const DsmMatrix: React.FC<DsmMatrixProps> = ({ data, onSelectNode }) => {
                 level === 'MODULE' ? 'bg-primary/20 text-primary border border-primary/40 font-bold' : 'text-muted hover:text-white'
               }`}
             >
-              Modullar (${data.nodes.filter((n) => n.type === 'file').length} ta fayl)
+              Modullar ({matrixData.items.length})
             </button>
             <button
               onClick={() => setLevel('FILE')}

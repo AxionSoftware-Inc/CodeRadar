@@ -33,6 +33,8 @@ struct Node {
     // Normalized token & structural fingerprints for probabilistic clone detection
     std::unordered_map<std::string, int> token_vector;
     std::unordered_map<std::string, int> norm_token_vector;
+    std::unordered_map<uint64_t, int> wl_vector;       // Order-invariant 1-hop WL structural hashes
+    std::vector<uint64_t> shingle_hashes;              // Sorted 5-token sliding-window hashes
     std::vector<std::string> cfg_sequence;
     std::vector<std::string> called_identifiers;
     std::vector<std::pair<std::string, std::string>> qualified_calls; // (qualifier, fn_name)

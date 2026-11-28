@@ -1,6 +1,17 @@
 export type ViewMode = 'CITY' | 'LAYER' | 'GALAXY' | 'MICRO' | 'DSM';
+export type SmellFilter = 'ALL' | 'CYCLES' | 'CLONES' | 'HOTSPOTS';
+export type GroupByMode = 'MODULE' | 'TOP_LEVEL' | 'LANGUAGE';
+export type HeightMetric = 'LOC' | 'COMPLEXITY' | 'BLAST';
 
-export type LanguageType = 'cpp' | 'dart' | 'cs' | 'python' | 'js' | 'other';
+export interface ViewportSettings {
+  groupBy: GroupByMode;
+  heightMetric: HeightMetric;
+  fogEnabled: boolean;
+  showLabels: boolean;
+  lodEnabled: boolean;
+}
+
+export type LanguageType = 'cpp' | 'dart' | 'cs' | 'kotlin' | 'python' | 'js' | 'other';
 
 export interface CodeNode {
   id: string;
@@ -18,6 +29,8 @@ export interface CodeNode {
   blast_radius: number;
   instability: number;
   pagerank: number;
+  runtime_heat?: number;
+  hotspot_score?: number;
   has_cycle: boolean;
   is_god: boolean;
   is_clone: boolean;
@@ -56,6 +69,7 @@ export const LANG_HEX_COLORS: Record<LanguageType, number> = {
   cpp: 0x60a5fa,      // Neon Sky Blue
   dart: 0x00d2b8,     // Neon Teal / Cyan
   cs: 0xa78bfa,       // Neon Violet
+  kotlin: 0xfb923c,   // Vivid Coral Orange
   python: 0xfbbf24,   // Golden Amber
   js: 0xf43f5e,       // Vivid Rose / Ruby
   other: 0x94a3b8,    // Slate
@@ -65,6 +79,7 @@ export const LANG_TEXT_COLORS: Record<LanguageType, string> = {
   cpp: '#60a5fa',
   dart: '#00d2b8',
   cs: '#a78bfa',
+  kotlin: '#fb923c',
   python: '#fbbf24',
   js: '#f43f5e',
   other: '#94a3b8',
@@ -76,6 +91,7 @@ export function getLanguage(filename: string): LanguageType {
   if (['cpp', 'hpp', 'h', 'cc', 'c', 'cxx'].includes(ext)) return 'cpp';
   if (ext === 'dart') return 'dart';
   if (ext === 'cs') return 'cs';
+  if (ext === 'kt' || ext === 'kts') return 'kotlin';
   if (ext === 'py') return 'python';
   if (['js', 'ts', 'jsx', 'tsx', 'mjs', 'cjs'].includes(ext)) return 'js';
   return 'other';

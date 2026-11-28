@@ -1,5 +1,6 @@
 # Compiled binaries & object files
 arch_radar
+test_core
 *.o
 *.out
 
@@ -14,6 +15,7 @@ web/bim_analysis.json
 node_modules/
 .next/
 out/
+web/tsconfig.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

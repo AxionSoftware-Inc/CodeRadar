@@ -98,10 +98,10 @@ bool BinaryWriter::write_binary(const std::string& bin_path, const std::string& 
         }
     }
 
-    // 2. Write Header (24 bytes)
+    // 2. Write Header (26 bytes)
     // Magic: "ARCH"
     write_u8('A'); write_u8('R'); write_u8('C'); write_u8('H');
-    write_u16(3); // Version 3 (uint32_t line_start, line_end + blast_radius)
+    write_u16(4); // Version 4 (adds runtime_heat, hotspot_score)
     write_f32(static_cast<float>(health_score));
     write_u32(static_cast<uint32_t>(ordered_node_ids.size()));
     write_u32(static_cast<uint32_t>(graph.edges.size()));
@@ -135,6 +135,8 @@ bool BinaryWriter::write_binary(const std::string& bin_path, const std::string& 
         write_u16(static_cast<uint16_t>(n.blast_radius));
         write_f32(static_cast<float>(n.instability));
         write_f32(static_cast<float>(n.pagerank));
+        write_f32(static_cast<float>(n.runtime_heat));
+        write_f32(static_cast<float>(n.hotspot_score));
 
         uint8_t flags = node_flags[n.id];
         if (n.is_pass_through) flags |= (1 << 3);

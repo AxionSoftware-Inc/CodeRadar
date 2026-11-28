@@ -8,6 +8,8 @@ import {
   CodeNode, 
   CodeIssue, 
   ViewMode, 
+  SmellFilter,
+  ViewportSettings,
   getLangColorHex, 
   getTransitiveDependents 
 } from '@/lib/types';
@@ -16,6 +18,8 @@ interface ThreeViewportProps {
   data: AppData | null;
   mode: ViewMode;
   selectedLang: string;
+  smellFilter: SmellFilter;
+  settings: ViewportSettings;
   flowActive: boolean;
   selectedNode: CodeNode | null;
   selectedSprawl: CodeIssue | null;
@@ -32,6 +36,8 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
   data,
   mode,
   selectedLang,
+  smellFilter,
+  settings,
   flowActive,
   selectedNode,
   selectedSprawl,
@@ -56,6 +62,9 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
   const clickableObjectsRef = useRef<THREE.Mesh[]>([]);
   const meshMapRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const flowCurvesRef = useRef<Array<{ curve: THREE.QuadraticBezierCurve3; color: number; progress: number }>>([]);
+  const flyAnimRef = useRef<number | null>(null);
+  const lodEnabledRef = useRef<boolean>(settings.lodEnabled);
+  lodEnabledRef.current = settings.lodEnabled;
 
   // Clear three group helper
   const clearGroup = (group: THREE.Group) => {
@@ -65,10 +74,44 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
       if ((obj as THREE.Mesh).geometry) (obj as THREE.Mesh).geometry.dispose();
       if ((obj as THREE.Mesh).material) {
         const mat = (obj as THREE.Mesh).material;
-        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-        else mat.dispose();
+        const disposeMat = (m: THREE.Material) => {
+          if ((m as THREE.SpriteMaterial).map) (m as THREE.SpriteMaterial).map?.dispose();
+          m.dispose();
+        };
+        if (Array.isArray(mat)) mat.forEach(disposeMat);
+        else disposeMat(mat);
       }
     }
+  };
+
+  // Create crisp 3D label sprite for module islands
+  const createModuleLabel = (text: string): THREE.Sprite | null => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 96;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = 'rgba(10, 15, 28, 0.82)';
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(8, 12, 496, 72, 14);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = 'bold 34px monospace';
+    ctx.fillStyle = '#e2e8f0';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const label = text.length > 26 ? '...' + text.slice(-23) : text;
+    ctx.fillText(label, 256, 48);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(210, 40, 1);
+    return sprite;
   };
 
   // Draw smooth quadratic bezier beam
@@ -115,9 +158,17 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
     return null;
   };
 
+  const cancelFlyTo = () => {
+    if (flyAnimRef.current !== null) {
+      cancelAnimationFrame(flyAnimRef.current);
+      flyAnimRef.current = null;
+    }
+  };
+
   // Smooth camera interpolation
   const flyTo = (x: number, y: number, z: number, target?: { x: number; y: number; z: number }) => {
     if (!cameraRef.current || !controlsRef.current) return;
+    cancelFlyTo();
     const sPos = cameraRef.current.position.clone();
     const tPos = new THREE.Vector3(x, y, z);
     const sTar = controlsRef.current.target.clone();
@@ -128,9 +179,13 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
       p += 0.055;
       cameraRef.current?.position.lerpVectors(sPos, tPos, Math.min(1, p));
       controlsRef.current?.target.lerpVectors(sTar, tTar, Math.min(1, p));
-      if (p < 1) requestAnimationFrame(f);
+      if (p < 1) {
+        flyAnimRef.current = requestAnimationFrame(f);
+      } else {
+        flyAnimRef.current = null;
+      }
     };
-    f();
+    flyAnimRef.current = requestAnimationFrame(f);
   };
 
   const resetCam = () => {
@@ -158,7 +213,7 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x06080d);
-    scene.fog = new THREE.FogExp2(0x06080d, 0.00035);
+    scene.fog = settings.fogEnabled ? new THREE.Fog(0x06080d, 6000, 22000) : null;
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 1, 50000);
@@ -178,16 +233,19 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
     controls.maxPolarAngle = Math.PI / 2 + 0.04;
     controls.minDistance = 30;
     controls.maxDistance = 16000;
+    controls.addEventListener('start', cancelFlyTo);
     controlsRef.current = controls;
 
-    // Lighting
-    const amb = new THREE.AmbientLight(0xffffff, 0.85);
+    // Lighting: balanced ambient + hemisphere + dual directional so zoomed-out city stays crisp & bright
+    const amb = new THREE.AmbientLight(0xffffff, 1.15);
     scene.add(amb);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.4);
-    dir.position.set(1200, 2500, 1500);
+    const hemi = new THREE.HemisphereLight(0xbae6fd, 0x1e293b, 0.85);
+    scene.add(hemi);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.35);
+    dir.position.set(1200, 2800, 1500);
     scene.add(dir);
-    const dir2 = new THREE.DirectionalLight(0x38bdf8, 0.6);
-    dir2.position.set(-1500, 1600, -1500);
+    const dir2 = new THREE.DirectionalLight(0x38bdf8, 0.75);
+    dir2.position.set(-1500, 2000, -1500);
     scene.add(dir2);
 
     scene.add(cityGroupRef.current);
@@ -247,6 +305,8 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
 
           const instabilityPct = Math.round((u.instability || 0) * 100);
           const prScore = (u.pagerank || 0).toFixed(4);
+          const hotspotPct = Math.round((u.hotspot_score || 0) * 100);
+          const heatPct = Math.round((u.runtime_heat || 0) * 100);
 
           tooltipRef.current.innerHTML = `
             <div class="font-bold text-white flex items-center justify-between gap-3 border-b border-white/10 pb-1">
@@ -257,9 +317,10 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
               <span class="text-gray-400">Modul:</span> ${u.module || 'root'}<br/>
               <span class="text-gray-400">LOC:</span> ${u.loc || 0} • <span class="text-gray-400">Murakkablik:</span> ${u.complexity || 1}<br/>
               <span class="text-gray-400">Blast Radius:</span> <strong class="text-rose-400">${u.blast_radius || 0} ta bog'liq</strong><br/>
-              <span class="text-gray-400">Instability (I):</span> ${instabilityPct}% • <span class="text-gray-400">PageRank:</span> ${prScore}
+              <span class="text-gray-400">Instability (I):</span> ${instabilityPct}% • <span class="text-gray-400">PageRank:</span> ${prScore}<br/>
+              <span class="text-gray-400">Hotspot:</span> <strong class="text-orange-400">${hotspotPct}%</strong>${heatPct > 0 ? ` • <span class="text-red-400">Heat: ${heatPct}%</span>` : ''}
             </div>
-            ${u.is_god ? '<div class="text-[10px] text-amber-400 font-bold mt-1">⚡ God Object / Yuqori Bog\'liqlik</div>' : ''}
+            ${u.is_god ? '<div class="text-[10px] text-amber-400 font-bold mt-1">⚡ Markaziy Tugun (Hub) / Yuqori Bog\'liqlik</div>' : ''}
             ${u.is_sprawl ? '<div class="text-[10px] text-yellow-300 font-bold mt-1">✨ Abstraksiya Sprawl Klasteri</div>' : ''}
             ${u.is_clone ? '<div class="text-[10px] text-purple-400 font-bold mt-1">🧬 Semantik Dublikat (Type-3/4)</div>' : ''}
             ${u.has_cycle ? '<div class="text-[10px] text-red-400 font-bold mt-1">⚠️ Aylanma Bog\'liqlik (Cycle)</div>' : ''}
@@ -272,7 +333,21 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
       }
     };
 
-    const onPointerDown = (e: MouseEvent) => {
+    let pointerDownPos: { x: number; y: number; button: number } | null = null;
+
+    const onPointerDown = (e: PointerEvent) => {
+      pointerDownPos = { x: e.clientX, y: e.clientY, button: e.button };
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (!pointerDownPos || pointerDownPos.button !== 0 || e.button !== 0) {
+        pointerDownPos = null;
+        return;
+      }
+      const moved = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+      pointerDownPos = null;
+      if (moved >= 5) return; // Ignore orbit/pan drags; only select on genuine click
+
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -296,6 +371,7 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
     window.addEventListener('resize', onResize);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
 
     // Animation Loop
     let animId: number;
@@ -305,6 +381,11 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
       animId = requestAnimationFrame(animate);
       const elapsedTime = clock.getElapsedTime();
       controls.update();
+
+      // Semantic LOD: hide dense background dependency arcs when zoomed far out
+      if (beamGroupRef.current) {
+        beamGroupRef.current.visible = !lodEnabledRef.current || camera.position.y < 2600;
+      }
 
       // Pulsate highlight ring
       if (highlightRingRef.current && (highlightRingRef.current.material as THREE.MeshBasicMaterial).opacity > 0) {
@@ -340,9 +421,12 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
 
     return () => {
       cancelAnimationFrame(animId);
+      cancelFlyTo();
       window.removeEventListener('resize', onResize);
+      controls.removeEventListener('start', cancelFlyTo);
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
       renderer.dispose();
       if (containerRef.current?.contains(renderer.domElement)) {
         containerRef.current.removeChild(renderer.domElement);
@@ -355,7 +439,14 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
     particlesGroupRef.current.visible = flowActive;
   }, [flowActive]);
 
-  // Rebuild 3D scene when data, mode, or selectedLang changes
+  // Toggle distance fog live without rebuilding scene
+  useEffect(() => {
+    if (sceneRef.current) {
+      sceneRef.current.fog = settings.fogEnabled ? new THREE.Fog(0x06080d, 6000, 22000) : null;
+    }
+  }, [settings.fogEnabled]);
+
+  // Rebuild 3D scene when data, mode, selectedLang, or layout settings change
   useEffect(() => {
     if (!data) return;
     clearGroup(cityGroupRef.current);
@@ -378,14 +469,33 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
     } else if (mode === 'MICRO') {
       buildMicro();
     }
-  }, [data, mode, selectedLang]);
+  }, [data, mode, selectedLang, settings.groupBy, settings.heightMetric, settings.showLabels]);
 
-  // Re-draw selection beams & Blast Radius Focus when selectedNode or selectedSprawl changes
+  // Re-draw selection beams, Blast Radius Focus, and Focus Dimming / Smell Spotlight
   useEffect(() => {
     clearGroup(selectBeamGroupRef.current);
     if (!data) return;
 
+    const applyDimming = (focusedIds: Set<string> | null) => {
+      clickableObjectsRef.current.forEach((m) => {
+        const mat = m.material as THREE.MeshStandardMaterial;
+        const u = m.userData as CodeNode | undefined;
+        if (!mat || !u) return;
+        if (!focusedIds) {
+          mat.transparent = false;
+          mat.opacity = 1.0;
+        } else {
+          const isFocused = focusedIds.has(u.id) || (u.file_path && focusedIds.has('file:' + u.file_path));
+          mat.transparent = !isFocused;
+          mat.opacity = isFocused ? 1.0 : 0.14;
+        }
+        mat.needsUpdate = true;
+      });
+    };
+
     if (selectedSprawl) {
+      const focused = new Set<string>(selectedSprawl.involved_nodes);
+      applyDimming(focused);
       const meshes: THREE.Mesh[] = [];
       selectedSprawl.involved_nodes.forEach((nid) => {
         const m = resolveMeshForNode(nid);
@@ -416,6 +526,7 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
     }
 
     if (selectedNode) {
+      const focused = new Set<string>([selectedNode.id]);
       const mesh = resolveMeshForNode(selectedNode.id);
       if (mesh) {
         // Place highlight ring under selected mesh
@@ -428,10 +539,12 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
         data.edges.forEach((e) => {
           if (e.type === 'contains') return;
           if (e.source === selectedNode.id) {
+            focused.add(e.target);
             const tm = resolveMeshForNode(e.target);
             if (tm) drawArc(mesh.position, tm.position, 0x38bdf8, selectBeamGroupRef.current, 0.95, false, 0.4);
           }
           if (e.target === selectedNode.id) {
+            focused.add(e.source);
             const sm = resolveMeshForNode(e.source);
             if (sm) drawArc(sm.position, mesh.position, 0x3fb950, selectBeamGroupRef.current, 0.95, false, 0.4);
           }
@@ -441,6 +554,7 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
         if (blastSimActive) {
           const dependents = getTransitiveDependents(selectedNode.id, data.edges, 3);
           dependents.forEach((depId) => {
+            focused.add(depId);
             const depMesh = resolveMeshForNode(depId);
             if (depMesh) {
               drawArc(mesh.position, depMesh.position, 0xf43f5e, selectBeamGroupRef.current, 0.85, false, 0.55);
@@ -448,14 +562,26 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
           });
         }
 
+        applyDimming(focused);
         flyTo(mesh.position.x, mesh.position.y + 70, mesh.position.z + 160, mesh.position);
       }
     } else {
       if (highlightRingRef.current) {
         (highlightRingRef.current.material as THREE.MeshBasicMaterial).opacity = 0;
       }
+      if (smellFilter !== 'ALL') {
+        const focused = new Set<string>();
+        data.nodes.forEach((n) => {
+          if (smellFilter === 'CYCLES' && (n.has_cycle || n.is_layer_violation)) focused.add(n.id);
+          else if (smellFilter === 'CLONES' && (n.is_clone || n.is_sprawl)) focused.add(n.id);
+          else if (smellFilter === 'HOTSPOTS' && ((n.hotspot_score || 0) >= 0.45 || (n.runtime_heat || 0) > 0.2 || n.is_god)) focused.add(n.id);
+        });
+        applyDimming(focused);
+      } else {
+        applyDimming(null);
+      }
     }
-  }, [selectedNode, selectedSprawl, blastSimActive]);
+  }, [selectedNode, selectedSprawl, blastSimActive, smellFilter, data, mode, selectedLang]);
 
   // 1. CODE CITY BUILDER (Software City Metaphor)
   const buildCity = () => {
@@ -465,7 +591,27 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
 
     files.forEach((n) => {
       if (selectedLang !== 'ALL' && n.lang !== selectedLang) return;
-      const m = n.module || 'root';
+      let m = n.module || 'root';
+      if (settings.groupBy === 'LANGUAGE') {
+        const langMap: Record<string, string> = {
+          cpp: 'C / C++',
+          dart: 'Dart / Flutter',
+          kotlin: 'Kotlin / Android',
+          cs: 'C# / .NET',
+          python: 'Python',
+          js: 'JS / TypeScript',
+          other: 'Other',
+        };
+        m = langMap[n.lang] || 'Other';
+      } else if (settings.groupBy === 'TOP_LEVEL') {
+        const fp = n.file_path || m;
+        const parts = fp.split('/');
+        if (parts.length >= 2 && (parts[0] === 'apps' || parts[0] === 'packages' || parts[0] === 'tools' || parts[0] === 'src')) {
+          m = parts[0] + '/' + parts[1];
+        } else {
+          m = parts[0] || m;
+        }
+      }
       if (!modules[m]) modules[m] = [];
       modules[m].push(n);
     });
@@ -540,6 +686,15 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
       borderLine.position.set(dx, 3, dz);
       cityGroupRef.current.add(borderLine);
 
+      // 3D Module Label above island
+      if (settings.showLabels) {
+        const labelSprite = createModuleLabel(modName);
+        if (labelSprite) {
+          labelSprite.position.set(dx, 42, dz - pSize / 2 - 20);
+          cityGroupRef.current.add(labelSprite);
+        }
+      }
+
       // Place file skyscrapers
       fList.forEach((f, fIdx) => {
         const fr = Math.floor(fIdx / inCols);
@@ -548,7 +703,13 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
         const startZ = dz - pSize / 2 + 50;
         const bx = startX + fc * 60;
         const bz = startZ + fr * 60;
-        const bh = Math.max(18, Math.min(360, (f.loc || 20) * 0.42));
+        const rawVal =
+          settings.heightMetric === 'COMPLEXITY'
+            ? (f.complexity || 1) * 4.5
+            : settings.heightMetric === 'BLAST'
+            ? (f.blast_radius || 0) * 1.2
+            : (f.loc || 20) * 0.42;
+        const bh = Math.max(18, Math.min(360, rawVal));
 
         let color = getLangColorHex(f.name);
         let emissiveColor = 0x000000;
@@ -570,6 +731,10 @@ export const ThreeViewport: React.FC<ThreeViewportProps> = ({
           color = 0xf59e0b;
           emissiveColor = 0xf59e0b;
           emissiveIntensity = 0.35;
+        } else if ((f.runtime_heat || 0) > 0.3 || (f.hotspot_score || 0) >= 0.6) {
+          color = 0xf97316;
+          emissiveColor = 0xea580c;
+          emissiveIntensity = Math.min(0.55, 0.25 + (f.hotspot_score || 0) * 0.4);
         }
 
         const bldgGeom = new THREE.BoxGeometry(26, bh, 26);

@@ -40,6 +40,46 @@ double cosine_sparse_int(const std::unordered_map<std::string, int>& v1, double 
     return dot / (norm1 * norm2);
 }
 
+double cosine_sparse_u64(const std::unordered_map<uint64_t, int>& v1, double norm1,
+                         const std::unordered_map<uint64_t, int>& v2, double norm2) {
+    if (norm1 <= 0.0 || norm2 <= 0.0) return 0.0;
+    const auto& small_v = (v1.size() < v2.size()) ? v1 : v2;
+    const auto& large_v = (v1.size() < v2.size()) ? v2 : v1;
+    double dot = 0.0;
+    for (const auto& p : small_v) {
+        auto it = large_v.find(p.first);
+        if (it != large_v.end()) {
+            dot += static_cast<double>(p.second) * it->second;
+        }
+    }
+    return dot / (norm1 * norm2);
+}
+
+size_t sorted_shingle_overlap(const std::vector<uint64_t>& a, const std::vector<uint64_t>& b) {
+    size_t i = 0, j = 0, inter = 0;
+    while (i < a.size() && j < b.size()) {
+        if (a[i] == b[j]) { inter++; i++; j++; }
+        else if (a[i] < b[j]) i++;
+        else j++;
+    }
+    return inter;
+}
+
+size_t lcs_length_capped(const std::vector<std::string>& a, const std::vector<std::string>& b, size_t max_len = 80) {
+    size_t n = std::min(a.size(), max_len);
+    size_t m = std::min(b.size(), max_len);
+    if (n == 0 || m == 0) return 0;
+    std::vector<size_t> prev(m + 1, 0), curr(m + 1, 0);
+    for (size_t i = 1; i <= n; ++i) {
+        for (size_t j = 1; j <= m; ++j) {
+            if (a[i - 1] == b[j - 1]) curr[j] = prev[j - 1] + 1;
+            else curr[j] = std::max(prev[j], curr[j - 1]);
+        }
+        std::swap(prev, curr);
+    }
+    return prev[m];
+}
+
 double cosine_behavior(const std::array<double, 8>& a, const std::array<double, 8>& b) {
     double dot = 0.0, ma = 0.0, mb = 0.0;
     for (size_t i = 0; i < 8; ++i) {
@@ -86,7 +126,8 @@ double jaccard_subtokens(const std::unordered_set<std::string>& a, const std::un
 
 struct DisjointSet {
     std::vector<size_t> parent;
-    explicit DisjointSet(size_t n) : parent(n) {
+    std::vector<size_t> sz;
+    explicit DisjointSet(size_t n) : parent(n), sz(n, 1) {
         for (size_t i = 0; i < n; ++i) parent[i] = i;
     }
     size_t find(size_t x) {
@@ -96,10 +137,13 @@ struct DisjointSet {
         }
         return x;
     }
-    void unite(size_t a, size_t b) {
+    void unite(size_t a, size_t b, size_t max_cluster = 25) {
         a = find(a);
         b = find(b);
-        if (a != b) parent[b] = a;
+        if (a != b && sz[a] + sz[b] <= max_cluster) {
+            parent[b] = a;
+            sz[a] += sz[b];
+        }
     }
 };
 
@@ -329,8 +373,14 @@ void ArchitectureAnalyzer::detect_circular_dependencies(Graph& graph, std::vecto
 }
 
 void ArchitectureAnalyzer::detect_layer_violations(Graph& graph, std::vector<CodeIssue>& issues) {
-    auto get_layer_rank = [](const std::string& mod) -> int {
-        if (mod.find("core") != std::string::npos) return 0;
+    auto is_exact_core = [](const std::string& mod) {
+        return mod == "core" || mod == "src/core" ||
+               mod.rfind("core/", 0) == 0 ||
+               mod.find("/core/") != std::string::npos ||
+               (mod.size() >= 5 && mod.compare(mod.size() - 5, 5, "/core") == 0);
+    };
+    auto get_layer_rank = [&](const std::string& mod) -> int {
+        if (is_exact_core(mod)) return 0;
         if (mod.find("api") != std::string::npos) return 1;
         if (mod.find("apps") != std::string::npos || mod.find("tools") != std::string::npos || mod.find("website") != std::string::npos) return 2;
         return 1;
@@ -401,7 +451,7 @@ void ArchitectureAnalyzer::detect_god_objects(Graph& graph, std::vector<CodeIssu
         issue.id = "GOD_OBJECT_" + std::to_string(god_count);
         issue.type = "GOD_OBJECT";
         issue.severity = IssueSeverity::WARNING;
-        issue.title = "God Object / Bog'liqlik Markazi: " + node->name;
+        issue.title = "Markaziy Tugun (Hub): " + node->name;
 
         std::stringstream ss;
         ss << "Kiruvchi bog'liqlik: " << node->in_degree << " ta, Ta'sir doirasi (Blast Radius): " << node->blast_radius
@@ -424,6 +474,7 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
         double cfg_norm = 0.0;
         std::unordered_map<std::string, double> api_tfidf;
         double api_norm = 0.0;
+        double wl_norm = 0.0;
         std::unordered_set<std::string> name_subtokens;
     };
 
@@ -482,6 +533,12 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
             }
             f.cfg_norm = std::sqrt(csq);
         }
+
+        double wlsq = 0.0;
+        for (const auto& kv : f.node->wl_vector) {
+            wlsq += static_cast<double>(kv.second) * kv.second;
+        }
+        f.wl_norm = std::sqrt(wlsq);
     }
 
     struct CloneCandidate {
@@ -491,6 +548,9 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
         double tfidf_sim;
         double cfg_sim;
         double api_sim;
+        double wl_sim;
+        double mdl_gain;
+        int est_params;
         std::string kind;
     };
 
@@ -512,7 +572,7 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
             dsu.unite(bucket[0], bucket[b]);
             cluster_edge_probs[bucket[0]].push_back(0.99);
             if (b <= 5) {
-                candidates.push_back({bucket[0], bucket[b], 0.99, 1.0, 1.0, 1.0, "Type-1/2: Bir xil funksiya"});
+                candidates.push_back({bucket[0], bucket[b], 0.99, 1.0, 1.0, 1.0, 1.0, 0.85, 0, "Type-1/2: Bir xil funksiya"});
             }
         }
     }
@@ -527,15 +587,28 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
         double sz_ratio = std::min(sz1, sz2) / std::max(sz1, sz2);
         double loc_ratio = static_cast<double>(std::min(f1.node->loc, f2.node->loc)) /
                            static_cast<double>(std::max(f1.node->loc, f2.node->loc));
-        if (sz_ratio < 0.40 || loc_ratio < 0.35) return;
+
+        // Sliding-window shingle overlap can detect shared sub-blocks even when total function sizes differ
+        size_t sh_inter = sorted_shingle_overlap(f1.node->shingle_hashes, f2.node->shingle_hashes);
+        double sim_shingle = 0.0;
+        if (sh_inter > 0) {
+            size_t sh_union = f1.node->shingle_hashes.size() + f2.node->shingle_hashes.size() - sh_inter;
+            if (sh_union > 0) sim_shingle = static_cast<double>(sh_inter) / static_cast<double>(sh_union);
+        }
+        bool is_subblock_match = (sh_inter >= 5 && sim_shingle >= 0.25);
+
+        if (!is_subblock_match && (sz_ratio < 0.40 || loc_ratio < 0.35)) return;
 
         double sim_tfidf = cosine_sparse_double(f1.tfidf, f1.tfidf_norm, f2.tfidf, f2.tfidf_norm);
         double sim_api = (f1.api_norm > 0.0 && f2.api_norm > 0.0)
             ? cosine_sparse_double(f1.api_tfidf, f1.api_norm, f2.api_tfidf, f2.api_norm)
             : 0.0;
+        double sim_wl = (f1.wl_norm > 0.0 && f2.wl_norm > 0.0)
+            ? cosine_sparse_u64(f1.node->wl_vector, f1.wl_norm, f2.node->wl_vector, f2.wl_norm)
+            : 0.0;
 
-        // Dual-gate fast prune: keep if either syntactic structure OR side-effect API footprint is similar
-        if (sim_tfidf < 0.42 && sim_api < 0.45) return;
+        // Multi-gate fast prune: keep if syntactic TF-IDF, order-invariant WL, API footprint, or shingle sub-block matches
+        if (sim_tfidf < 0.40 && sim_wl < 0.48 && sim_api < 0.45 && !is_subblock_match) return;
 
         double sim_behav = cosine_behavior(f1.node->behavior_profile, f2.node->behavior_profile);
         double sim_cfg = (f1.cfg_norm > 0.0 && f2.cfg_norm > 0.0)
@@ -543,22 +616,38 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
             : 0.0;
         double sim_name = jaccard_subtokens(f1.name_subtokens, f2.name_subtokens);
 
+        // LCS & Minimum Description Length (MDL) Compression Gain
+        size_t lcs_len = lcs_length_capped(f1.node->cfg_sequence, f2.node->cfg_sequence);
+        double c1 = static_cast<double>(std::max<size_t>(1, f1.node->cfg_sequence.size()));
+        double c2 = static_cast<double>(std::max<size_t>(1, f2.node->cfg_sequence.size()));
+        double lcs_ratio = (2.0 * static_cast<double>(lcs_len)) / (c1 + c2);
+        int est_params = static_cast<int>(std::max(0.0, std::round((c1 + c2 - 2.0 * static_cast<double>(lcs_len)) * 0.5)));
+
+        double l1 = static_cast<double>(f1.node->loc);
+        double l2 = static_cast<double>(f2.node->loc);
+        double shared_loc = std::min(l1, l2) * std::max(lcs_ratio, sim_wl);
+        double call_overhead = 2.0 * (2.0 + 1.0 * std::min(est_params, 8));
+        double mdl_gain = (l1 + l2 > 0.0) ? ((l1 + l2 - (shared_loc + call_overhead)) / (l1 + l2)) : 0.0;
+
         double base_prob = 0.0;
         if (f1.cfg_norm > 0.0 && f2.cfg_norm > 0.0) {
             if (f1.api_norm > 0.0 && f2.api_norm > 0.0) {
-                base_prob = 0.32 * sim_tfidf + 0.25 * sim_cfg + 0.28 * sim_api + 0.15 * sim_behav;
+                base_prob = 0.24 * sim_tfidf + 0.22 * sim_wl + 0.18 * sim_cfg + 0.24 * sim_api + 0.12 * sim_behav;
             } else {
-                base_prob = 0.45 * sim_tfidf + 0.35 * sim_cfg + 0.20 * sim_behav;
+                base_prob = 0.34 * sim_tfidf + 0.30 * sim_wl + 0.22 * sim_cfg + 0.14 * sim_behav;
             }
         } else {
             if (f1.api_norm > 0.0 && f2.api_norm > 0.0) {
-                base_prob = 0.40 * sim_tfidf + 0.40 * sim_api + 0.20 * sim_behav;
+                base_prob = 0.30 * sim_tfidf + 0.25 * sim_wl + 0.30 * sim_api + 0.15 * sim_behav;
             } else {
-                base_prob = 0.70 * sim_tfidf + 0.30 * sim_behav;
+                base_prob = 0.45 * sim_tfidf + 0.35 * sim_wl + 0.20 * sim_behav;
             }
         }
 
-        double prob = std::min(0.99, base_prob + 0.10 * sim_name);
+        // Logistic calibration boost from shingle overlap and MDL compression gain
+        double logit = 5.0 * (base_prob - 0.55) + 0.8 * sim_name + 1.2 * std::max(0.0, mdl_gain) + 1.5 * sim_shingle;
+        double logistic_prob = 1.0 / (1.0 + std::exp(-logit));
+        double prob = std::min(0.99, 0.65 * base_prob + 0.35 * logistic_prob + 0.06 * sim_name);
 
         // Same function name across different files is a strong signal of accidental re-implementation
         if (f1.node->name == f2.node->name && f1.node->file_path != f2.node->file_path) {
@@ -566,18 +655,30 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
         }
 
         // Connect in Abstraction Sprawl Similarity Graph if strongly similar OR semantic API family
-        bool is_sprawl_edge = (prob >= 0.72) ||
-            (sim_api >= 0.58 && sim_behav >= 0.80 && sim_name >= 0.25);
+        bool is_sprawl_edge = (prob >= 0.76) ||
+            (sim_api >= 0.62 && sim_behav >= 0.82 && sim_name >= 0.30);
         if (is_sprawl_edge) {
             dsu.unite(i, j);
             cluster_edge_probs[i].push_back(prob);
         }
 
-        if (prob >= threshold) {
-            std::string kind = (sim_tfidf >= 0.85)
-                ? "Type-3: O'zgartirilgan nusxa"
-                : "Type-4: Ehtimoliy mantiqiy o'xshashlik";
-            candidates.push_back({i, j, prob, sim_tfidf, sim_cfg, sim_api, kind});
+        // Only flag extractable clone if MDL compression gain is positive (worth extracting)
+        // Calibrate threshold slightly higher for Dart UI widget trees to reduce structural boilerplate noise
+        double effective_threshold = threshold;
+        auto is_dart = [](const std::string& p) {
+            return p.size() >= 5 && p.compare(p.size() - 5, 5, ".dart") == 0;
+        };
+        if (is_dart(f1.node->file_path) && is_dart(f2.node->file_path)) {
+            effective_threshold = std::min(0.95, threshold + 0.05);
+        }
+
+        if ((prob >= effective_threshold && mdl_gain > 0.05) || (is_subblock_match && mdl_gain > 0.12)) {
+            std::string kind = is_subblock_match && loc_ratio < 0.35
+                ? "Sub-block: Umumiy ichki mantiq"
+                : ((sim_tfidf >= 0.85 || sim_wl >= 0.88)
+                    ? "Type-3: O'zgartirilgan nusxa"
+                    : "Type-4: Ehtimoliy mantiqiy o'xshashlik");
+            candidates.push_back({i, j, prob, sim_tfidf, sim_cfg, sim_api, sim_wl, mdl_gain, est_params, kind});
         }
     };
 
@@ -794,10 +895,14 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
         ss << "'" << fn1->name << "' (" << fn1->file_path << ":" << fn1->line_start
            << ") va '" << fn2->name << "' (" << fn2->file_path << ":" << fn2->line_start
            << ") [TF-IDF: " << static_cast<int>(c.tfidf_sim * 100)
+           << "%, WL: " << static_cast<int>(c.wl_sim * 100)
            << "%, CFG: " << static_cast<int>(c.cfg_sim * 100)
-           << "%, API: " << static_cast<int>(c.api_sim * 100) << "%].";
+           << "%, API: " << static_cast<int>(c.api_sim * 100)
+           << "%, MDL Siqish: +" << static_cast<int>(std::round(c.mdl_gain * 100))
+           << "%, ~" << c.est_params << " ta parametr].";
         issue.description = ss.str();
-        issue.recommendation = "DRY: Ikkala funksiyani bitta umumiy helper/utility funksiyaga birlashtiring.";
+        issue.recommendation = "DRY (MDL): Ikkala funksiyani ~" + std::to_string(c.est_params) +
+                               " ta parametrli bitta umumiy helper funksiyaga birlashtiring.";
         issue.involved_nodes.push_back(fn1->id);
         issue.involved_nodes.push_back(fn2->id);
         issue.score = (pct >= 92) ? 10.0 : 7.0;

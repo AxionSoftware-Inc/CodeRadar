@@ -301,6 +301,14 @@ Vazifa:
                 <div className="text-sm font-bold text-rose-400 font-mono">{node.blast_radius || 0} ta</div>
                 <div className="text-[10px] text-muted">Blast Radius ta'siri</div>
               </div>
+              <div className="bg-black/40 border border-border rounded-lg p-2.5">
+                <div className="text-sm font-bold text-orange-400 font-mono">{Math.round((node.hotspot_score || 0) * 100)}%</div>
+                <div className="text-[10px] text-muted">Hotspot (Bottleneck)</div>
+              </div>
+              <div className="bg-black/40 border border-border rounded-lg p-2.5">
+                <div className="text-sm font-bold text-red-400 font-mono">{Math.round((node.runtime_heat || 0) * 100)}%</div>
+                <div className="text-[10px] text-muted">Runtime Heat (Profiler)</div>
+              </div>
             </div>
 
             {/* Related Issues */}

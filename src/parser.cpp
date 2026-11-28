@@ -23,7 +23,7 @@ const std::unordered_set<std::string>& get_keywords() {
         "struct", "enum", "interface", "extends", "implements", "def", "function", "lambda",
         "in", "is", "as", "of", "and", "or", "not", "sizeof", "typedef", "template", "typename",
         "std", "size_t", "uint32_t", "uint16_t", "uint8_t", "int32_t", "int64_t", "List", "Map",
-        "Set", "Future", "Task", "Widget", "BuildContext", "dynamic", "Object"
+        "Set", "Future", "Task", "Widget", "BuildContext", "dynamic", "Object", "fun", "val", "object", "companion"
     };
     return kw;
 }
@@ -54,17 +54,39 @@ int count_newlines_up_to(const std::string& s, size_t pos) {
 
 std::string CodeParser::determine_module(const fs::path& file_path, const std::string& root_dir) const {
     fs::path rel = fs::relative(file_path, root_dir);
-    auto it = rel.begin();
-    if (it != rel.end()) {
-        std::string top = it->string();
-        ++it;
-        if ((top == "src" || top == "apps" || top == "tools" || top == "lib" || top == "packages") &&
-            it != rel.end() && it->string() != rel.filename().string()) {
-            return top + "/" + it->string();
-        }
-        return top;
+    std::vector<std::string> parts;
+    for (const auto& p : rel) {
+        parts.push_back(p.string());
     }
-    return "root";
+    if (parts.empty()) return "root";
+
+    // Handle deep feature/plugin/android subtrees inside apps/<app>/... (e.g. Flutter + Kotlin)
+    if (parts.size() >= 2 && (parts[0] == "apps" || parts[0] == "packages" || parts[0] == "tools")) {
+        // Check for apps/<app>/lib/src/features/<feature>/... or plugins/<plugin>/...
+        for (size_t i = 2; i + 1 < parts.size(); ++i) {
+            if ((parts[i] == "features" || parts[i] == "plugins") && i + 2 < parts.size()) {
+                return parts[1] + "/" + parts[i + 1];
+            }
+            if (parts[i] == "src" && i + 1 < parts.size() - 1 &&
+                parts[i + 1] != "features" && parts[i + 1] != "plugins") {
+                return parts[1] + "/" + parts[i + 1];
+            }
+            if (parts[i] == "android" && i + 1 < parts.size()) {
+                return parts[1] + "/android";
+            }
+            if (parts[i] == "test" || parts[i] == "integration_test") {
+                return parts[1] + "/tests";
+            }
+        }
+        if (parts.size() >= 3) {
+            return parts[0] + "/" + parts[1];
+        }
+    }
+
+    if (parts.size() >= 3 && (parts[0] == "src" || parts[0] == "lib")) {
+        return parts[0] + "/" + parts[1];
+    }
+    return parts[0];
 }
 
 std::string CodeParser::strip_comments_and_strings(const std::string& code, const std::string& ext) const {
@@ -175,11 +197,14 @@ int CodeParser::calculate_complexity(const std::string& clean_body) const {
 void CodeParser::extract_fingerprints(const std::string& clean_body, const std::string& fn_name, Node& fn_node) const {
     const auto& keywords = get_keywords();
     std::unordered_map<std::string, std::string> var_alias;
+    std::unordered_map<std::string, std::string> var_types;
     int var_counter = 0;
 
     std::vector<std::string> norm_seq;
     fn_node.token_vector.clear();
     fn_node.norm_token_vector.clear();
+    fn_node.wl_vector.clear();
+    fn_node.shingle_hashes.clear();
     fn_node.cfg_sequence.clear();
     fn_node.called_identifiers.clear();
     fn_node.qualified_calls.clear();
@@ -281,9 +306,14 @@ void CodeParser::extract_fingerprints(const std::string& clean_body, const std::
                         fn_node.called_identifiers.push_back(tok);
                     }
                     if (prev_member_op && !prev_ident.empty()) {
-                        std::string qkey = prev_ident + "\x1f" + tok;
+                        std::string resolved_qual = prev_ident;
+                        auto vt_it = var_types.find(prev_ident);
+                        if (vt_it != var_types.end()) {
+                            resolved_qual = vt_it->second;
+                        }
+                        std::string qkey = resolved_qual + "\x1f" + tok;
                         if (seen_qual_calls.insert(qkey).second) {
-                            fn_node.qualified_calls.push_back({prev_ident, tok});
+                            fn_node.qualified_calls.push_back({resolved_qual, tok});
                         }
                     }
                     // Keep call arity/role normalized as $CALL_x or $CALL
@@ -292,6 +322,11 @@ void CodeParser::extract_fingerprints(const std::string& clean_body, const std::
                     prev_ident.clear();
                     prev_member_op = false;
                 } else {
+                    // Track "TypeName varName" declarations (e.g. "AlphaService svc;") for receiver resolution
+                    if (!prev_member_op && !prev_ident.empty() &&
+                        std::isupper(static_cast<unsigned char>(prev_ident[0]))) {
+                        var_types[tok] = prev_ident;
+                    }
                     auto it = var_alias.find(tok);
                     std::string alias;
                     if (it == var_alias.end()) {
@@ -375,6 +410,33 @@ void CodeParser::extract_fingerprints(const std::string& clean_body, const std::
 
     fn_node.behavior_profile[7] = static_cast<double>(fn_node.cyclomatic_complexity);
     fn_node.exact_hash = norm_seq.empty() ? 0 : fnv1a_hash(norm_seq);
+
+    // Build order-invariant WL 1-hop neighborhood hashes & 5-token sliding-window shingles
+    // Replace positional $V0..$V15 with $VAR so variable declaration order does not alter hashes
+    std::vector<std::string> role_seq;
+    role_seq.reserve(norm_seq.size());
+    for (const auto& t : norm_seq) {
+        if (t.size() >= 3 && t[0] == '$' && t[1] == 'V' && std::isdigit(static_cast<unsigned char>(t[2]))) {
+            role_seq.push_back("$VAR");
+        } else {
+            role_seq.push_back(t);
+        }
+    }
+    if (role_seq.size() >= 3) {
+        for (size_t k = 1; k + 1 < role_seq.size(); ++k) {
+            uint64_t wh = fnv1a_hash({role_seq[k - 1], role_seq[k], role_seq[k + 1]});
+            fn_node.wl_vector[wh]++;
+        }
+    }
+    if (role_seq.size() >= 5) {
+        std::unordered_set<uint64_t> uniq_shingles;
+        for (size_t k = 0; k + 4 < role_seq.size(); ++k) {
+            uint64_t sh = fnv1a_hash({role_seq[k], role_seq[k + 1], role_seq[k + 2], role_seq[k + 3], role_seq[k + 4]});
+            uniq_shingles.insert(sh);
+        }
+        fn_node.shingle_hashes.assign(uniq_shingles.begin(), uniq_shingles.end());
+        std::sort(fn_node.shingle_hashes.begin(), fn_node.shingle_hashes.end());
+    }
 }
 
 bool CodeParser::check_pass_through(const std::string& clean_body, std::string& target_call) const {
@@ -450,6 +512,7 @@ CodeParser::ParsedFileResult CodeParser::parse_file_isolated(const fs::path& fil
     static const std::regex imp_py(R"((?:from\s+([a-zA-Z0-9_\.]+)\s+import|import\s+([a-zA-Z0-9_\.]+)))");
     static const std::regex imp_dart(R"((?:import|part(?:\s+of)?|export)\s+['"]([^'"]+)['"])");
     static const std::regex imp_cs(R"(using\s+([a-zA-Z0-9_\.]+)\s*;)");
+    static const std::regex imp_kt(R"(import\s+([a-zA-Z0-9_\.]+))");
 
     auto process_import = [&](const std::string& imported_target) {
         fs::path imp_p(imported_target);
@@ -473,6 +536,13 @@ CodeParser::ParsedFileResult CodeParser::parse_file_isolated(const fs::path& fil
             size_t dot = ns.rfind('.');
             std::string last = (dot != std::string::npos) ? ns.substr(dot + 1) : ns;
             res.imports.push_back(last + ".cs");
+        }
+    } else if (ext == ".kt" || ext == ".kts") {
+        for (std::sregex_iterator i(content.begin(), content.end(), imp_kt); i != std::sregex_iterator(); ++i) {
+            std::string ns = (*i)[1].str();
+            size_t dot = ns.rfind('.');
+            std::string last = (dot != std::string::npos) ? ns.substr(dot + 1) : ns;
+            res.imports.push_back(last + ".kt");
         }
     } else if (ext == ".js" || ext == ".ts") {
         for (std::sregex_iterator i(content.begin(), content.end(), imp_js); i != std::sregex_iterator(); ++i) {
@@ -728,6 +798,19 @@ namespace {
             write_str_bin(out, qp.first);
             write_str_bin(out, qp.second);
         }
+
+        uint32_t wl_cnt = static_cast<uint32_t>(n.wl_vector.size());
+        out.write(reinterpret_cast<const char*>(&wl_cnt), sizeof(wl_cnt));
+        for (const auto& kv : n.wl_vector) {
+            out.write(reinterpret_cast<const char*>(&kv.first), sizeof(kv.first));
+            out.write(reinterpret_cast<const char*>(&kv.second), sizeof(kv.second));
+        }
+
+        uint32_t sh_cnt = static_cast<uint32_t>(n.shingle_hashes.size());
+        out.write(reinterpret_cast<const char*>(&sh_cnt), sizeof(sh_cnt));
+        if (sh_cnt > 0) {
+            out.write(reinterpret_cast<const char*>(n.shingle_hashes.data()), sh_cnt * sizeof(uint64_t));
+        }
     }
     bool read_node_bin(std::istream& in, Node& n) {
         if (!read_str_bin(in, n.id) || !read_str_bin(in, n.name) || !read_str_bin(in, n.type) ||
@@ -764,6 +847,19 @@ namespace {
         for (uint32_t i = 0; i < q_cnt; ++i) {
             if (!read_str_bin(in, n.qualified_calls[i].first) || !read_str_bin(in, n.qualified_calls[i].second)) return false;
         }
+
+        uint32_t wl_cnt = 0;
+        if (!in.read(reinterpret_cast<char*>(&wl_cnt), sizeof(wl_cnt))) return false;
+        for (uint32_t i = 0; i < wl_cnt; ++i) {
+            uint64_t k = 0; int v = 0;
+            if (!in.read(reinterpret_cast<char*>(&k), sizeof(k)) || !in.read(reinterpret_cast<char*>(&v), sizeof(v))) return false;
+            n.wl_vector[k] = v;
+        }
+
+        uint32_t sh_cnt = 0;
+        if (!in.read(reinterpret_cast<char*>(&sh_cnt), sizeof(sh_cnt))) return false;
+        n.shingle_hashes.resize(sh_cnt);
+        if (sh_cnt > 0 && !in.read(reinterpret_cast<char*>(n.shingle_hashes.data()), sh_cnt * sizeof(uint64_t))) return false;
         return true;
     }
 }
@@ -772,7 +868,7 @@ bool CodeParser::load_cache(const std::string& cache_path, std::unordered_map<st
     std::ifstream in(cache_path, std::ios::binary);
     if (!in.is_open()) return false;
     char magic[4];
-    if (!in.read(magic, 4) || std::string(magic, 4) != "ARC1") return false;
+    if (!in.read(magic, 4) || std::string(magic, 4) != "ARC2") return false;
     uint32_t count = 0;
     if (!in.read(reinterpret_cast<char*>(&count), sizeof(count))) return false;
     for (uint32_t i = 0; i < count; ++i) {
@@ -798,7 +894,7 @@ bool CodeParser::load_cache(const std::string& cache_path, std::unordered_map<st
 bool CodeParser::save_cache(const std::string& cache_path, const std::unordered_map<std::string, ParsedFileResult>& cache_map) {
     std::ofstream out(cache_path, std::ios::binary);
     if (!out.is_open()) return false;
-    out.write("ARC1", 4);
+    out.write("ARC2", 4);
     uint32_t count = static_cast<uint32_t>(cache_map.size());
     out.write(reinterpret_cast<const char*>(&count), sizeof(count));
     for (const auto& kv : cache_map) {
@@ -833,13 +929,17 @@ void CodeParser::parse_directory(const std::string& root_dir, Graph& graph, bool
                 p_str.find("node_modules") != std::string::npos ||
                 p_str.find("/build/") != std::string::npos ||
                 p_str.find("/dist/") != std::string::npos ||
+                p_str.find("/__tests__/") != std::string::npos ||
+                p_str.find(".spec.") != std::string::npos ||
+                p_str.find(".test.") != std::string::npos ||
                 p_str.find("/fixtures/") != std::string::npos ||
                 p_str.find("/sample_imports/") != std::string::npos ||
                 p_str.find("/test_cache/") != std::string::npos) {
                 continue;
             }
             if (ext == ".cpp" || ext == ".hpp" || ext == ".h" || ext == ".cc" || ext == ".c" ||
-                ext == ".dart" || ext == ".cs" || ext == ".js" || ext == ".ts" || ext == ".py") {
+                ext == ".dart" || ext == ".cs" || ext == ".kt" || ext == ".kts" ||
+                ext == ".js" || ext == ".ts" || ext == ".py") {
                 paths.push_back(entry.path());
             }
         }
@@ -970,7 +1070,11 @@ void CodeParser::parse_directory(const std::string& root_dir, Graph& graph, bool
         "Offset", "Clear", "WriteString", "add", "first", "begin", "trim", "expect", "fail",
         "clear", "redo", "insert", "dot", "validateAll", "addListener", "near", "copy",
         "copyWith", "parse", "render", "push", "pop", "set", "get", "size", "length",
-        "empty", "end", "find", "count", "substr", "append", "reserve", "resize", "erase"
+        "empty", "end", "find", "count", "substr", "append", "reserve", "resize", "erase",
+        "forEach", "map", "filter", "reduce", "join", "slice", "splice", "concat", "includes",
+        "some", "every", "keys", "values", "entries", "describe", "it", "test", "h",
+        "indexOf", "lastIndexOf", "error", "warn", "log", "info", "debug", "assert",
+        "valueOf", "hasOwnProperty", "bind", "call"
     };
 
     // Scope-aware & Import-aware function call resolution
