@@ -3,6 +3,7 @@
 #include "analyzer.hpp"
 #include "json_writer.hpp"
 #include "binary_writer.hpp"
+#include "query.hpp"
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -40,28 +41,49 @@ fs::file_time_type get_latest_write_time(const std::string& dir) {
     return latest;
 }
 
-bool run_single_pass(const std::string& target_dir, const std::string& output_json, bool ci_mode, double min_score, int max_critical) {
+bool run_single_pass(const std::string& target_dir,
+                     const std::string& output_json,
+                     bool ci_mode,
+                     double min_score,
+                     int max_critical,
+                     bool use_cache,
+                     const std::string& profile_path,
+                     const std::string& query_cmd,
+                     const std::string& query_arg) {
     auto start_time = std::chrono::high_resolution_clock::now();
-    
-    std::cout << "\n\033[1;34m[*] Skanerlanmoqda: \033[0m" << target_dir << "\n";
-    
+    bool quiet = !query_cmd.empty();
+
+    if (!quiet) {
+        std::cout << "\n\033[1;34m[*] Skanerlanmoqda: \033[0m" << target_dir << "\n";
+    }
+
     Graph graph;
     CodeParser parser;
-    parser.parse_directory(target_dir, graph);
+    parser.parse_directory(target_dir, graph, use_cache, quiet);
 
     if (graph.nodes.empty()) {
-        std::cerr << "\033[1;31m[-] Manba fayllari topilmadi.\033[0m\n";
+        if (quiet) {
+            std::cout << "{\"error\": \"no source files found\"}\n";
+        } else {
+            std::cerr << "\033[1;31m[-] Manba fayllari topilmadi.\033[0m\n";
+        }
         return false;
     }
 
-    std::cout << "\033[1;32m[+] Topilgan Tugunlar: \033[0m" << graph.nodes.size() 
-              << " \033[1;32m| Bog'liqlik va Chaqiruvlar: \033[0m" << graph.edges.size() << "\n";
+    if (!quiet) {
+        std::cout << "\033[1;32m[+] Topilgan Tugunlar: \033[0m" << graph.nodes.size()
+                  << " \033[1;32m| Bog'liqlik va Chaqiruvlar: \033[0m" << graph.edges.size() << "\n";
+        std::cout << "[*] Topologik va Semantik Tahlil yuritilmoqda...\n";
+    }
 
-    std::cout << "[*] Topologik va Semantik Tahlil yuritilmoqda...\n";
     ArchitectureAnalyzer analyzer;
     std::vector<CodeIssue> issues;
     double health_score = 100.0;
-    analyzer.analyze(graph, issues, health_score);
+    analyzer.analyze(graph, issues, health_score, profile_path);
+
+    if (quiet) {
+        return QueryEngine::execute(query_cmd, query_arg, graph, issues, health_score) == 0;
+    }
 
     auto end_time = std::chrono::high_resolution_clock::now();
     double duration = std::chrono::duration<double>(end_time - start_time).count();
@@ -104,8 +126,9 @@ bool run_single_pass(const std::string& target_dir, const std::string& output_js
         shown++;
     }
 
-    // Write high-performance binary format & JS bundle
+    // Write high-performance binary format & JS bundle for both legacy and Next.js public directory
     BinaryWriter::write_binary("web/arch_data.bin", "web/data.js", graph, issues, health_score);
+    BinaryWriter::write_binary("web/public/arch_data.bin", "web/public/data.js", graph, issues, health_score);
 
     if (JsonWriter::write_report(output_json, graph, issues, health_score)) {
         std::cout << "\033[1;32m[✓] JSON hisobot saqlandi: \033[0m" << output_json << "\n";
@@ -126,17 +149,19 @@ bool run_single_pass(const std::string& target_dir, const std::string& output_js
 }
 
 int main(int argc, char* argv[]) {
-    print_banner();
-
     std::string target_dir = ".";
     std::string output_json = "analysis_result.json";
     bool ci_mode = false;
     bool watch_mode = false;
+    bool use_cache = true;
     double min_score = 70.0;
     int max_critical = 0;
 
     bool serve_mode = false;
     int port = 8080;
+    std::string profile_path;
+    std::string query_cmd;
+    std::string query_arg;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -144,6 +169,15 @@ int main(int argc, char* argv[]) {
             ci_mode = true;
         } else if (arg == "--watch" || arg == "-w") {
             watch_mode = true;
+        } else if (arg == "--no-cache") {
+            use_cache = false;
+        } else if (arg == "--profile" && i + 1 < argc) {
+            profile_path = argv[++i];
+        } else if (arg == "--query" && i + 1 < argc) {
+            query_cmd = argv[++i];
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                query_arg = argv[++i];
+            }
         } else if (arg == "--serve" || arg == "-s") {
             serve_mode = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') {
@@ -162,8 +196,12 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    if (query_cmd.empty()) {
+        print_banner();
+    }
+
     if (!watch_mode) {
-        bool ok = run_single_pass(target_dir, output_json, ci_mode, min_score, max_critical);
+        bool ok = run_single_pass(target_dir, output_json, ci_mode, min_score, max_critical, use_cache, profile_path, query_cmd, query_arg);
         if (serve_mode) {
             std::cout << "\n\033[1;36m[*] Mahalliy Web Server ishga tushirilmoqda: http://localhost:" << port << "\033[0m\n";
             std::string cmd = "python3 -m http.server " + std::to_string(port) + " -d web > /dev/null 2>&1 &";
@@ -172,7 +210,6 @@ int main(int argc, char* argv[]) {
             std::string open_cmd = "xdg-open http://localhost:" + std::to_string(port) + " > /dev/null 2>&1 &";
             int rc2 = std::system(open_cmd.c_str()); (void)rc2;
             std::cout << "\033[1;32m[✓] 3D Arxitektura brauzerda ochildi! To'xtatish uchun: Ctrl+C\033[0m\n";
-            // keep alive for server
             while (true) std::this_thread::sleep_for(std::chrono::seconds(10));
         }
         return ok ? 0 : 1;
@@ -180,7 +217,7 @@ int main(int argc, char* argv[]) {
 
     // Watch mode: continually monitors directory
     std::cout << "\033[1;33m[*] WATCH MODE FAOL: Kod bazasidagi o'zgarishlar kuzatilmoqda... (Chiqish uchun Ctrl+C)\033[0m\n";
-    run_single_pass(target_dir, output_json, ci_mode, min_score, max_critical);
+    run_single_pass(target_dir, output_json, ci_mode, min_score, max_critical, use_cache, profile_path, "", "");
 
     auto last_time = get_latest_write_time(target_dir);
     while (true) {
@@ -189,7 +226,7 @@ int main(int argc, char* argv[]) {
         if (current_time > last_time) {
             std::cout << "\n\033[1;33m[!] O'zgarish sezildi! Qayta tahlil qilinmoqda...\033[0m\n";
             last_time = current_time;
-            run_single_pass(target_dir, output_json, ci_mode, min_score, max_critical);
+            run_single_pass(target_dir, output_json, ci_mode, min_score, max_critical, use_cache, profile_path, "", "");
         }
     }
 

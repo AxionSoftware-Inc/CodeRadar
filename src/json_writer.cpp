@@ -72,6 +72,9 @@ bool JsonWriter::write_report(const std::string& output_path, const Graph& graph
         out << "      \"out_degree\": " << n.out_degree << ",\n";
         out << "      \"instability\": " << n.instability << ",\n";
         out << "      \"pagerank\": " << n.pagerank << ",\n";
+        out << "      \"blast_radius\": " << n.blast_radius << ",\n";
+        out << "      \"runtime_heat\": " << n.runtime_heat << ",\n";
+        out << "      \"hotspot_score\": " << n.hotspot_score << ",\n";
         out << "      \"is_pass_through\": " << (n.is_pass_through ? "true" : "false") << "\n";
         out << "    }" << (node_idx + 1 < graph.nodes.size() ? "," : "") << "\n";
     }

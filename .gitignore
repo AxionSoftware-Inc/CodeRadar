@@ -9,3 +9,15 @@ bim_analysis.json
 analysis_result.json
 web/analysis_result.json
 web/bim_analysis.json
+
+# Node & Next.js build artifacts
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+web/public/bim_analysis.json
+web/public/analysis_result.json
+web/index.legacy.html

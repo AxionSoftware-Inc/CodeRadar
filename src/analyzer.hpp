@@ -6,12 +6,14 @@
 
 class ArchitectureAnalyzer {
 public:
-    void analyze(Graph& graph, std::vector<CodeIssue>& issues, double& health_score);
+    void analyze(Graph& graph, std::vector<CodeIssue>& issues, double& health_score, const std::string& profile_path = "");
 
 private:
     void calculate_coupling_and_instability(Graph& graph);
     void calculate_blast_radius(Graph& graph);
     void calculate_pagerank(Graph& graph, double damping = 0.85, int iterations = 30);
+    void apply_profiler_overlay(Graph& graph, const std::string& profile_path);
+    void calculate_hotspots(Graph& graph);
     void detect_circular_dependencies(Graph& graph, std::vector<CodeIssue>& issues);
     void detect_layer_violations(Graph& graph, std::vector<CodeIssue>& issues);
     void detect_god_objects(Graph& graph, std::vector<CodeIssue>& issues);

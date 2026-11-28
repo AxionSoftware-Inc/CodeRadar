@@ -1,0 +1,628 @@
+{
+  "summary": {
+    "health_score": 37,
+    "total_nodes": 22,
+    "total_edges": 42,
+    "total_issues": 6
+  },
+  "issues": [
+    {
+      "id": "CIRCULAR_DEP_1",
+      "type": "CIRCULAR_DEPENDENCY",
+      "severity": "CRITICAL",
+      "title": "Aylanma Bog'liqlik Halqasi (3 qadam)",
+      "description": "inventory_service.hpp ➔ notification_service.hpp ➔ order_service.hpp ➔ inventory_service.hpp",
+      "recommendation": "DIP (Dependency Inversion): Umumiy interfeys yarating yoki bog'liqlikni teskarisiga o'giring.",
+      "involved_nodes": ["file:inventory/inventory_service.hpp", "file:notification/notification_service.hpp", "file:orders/order_service.hpp", "file:inventory/inventory_service.hpp"]
+    },
+    {
+      "id": "CIRCULAR_DEP_2",
+      "type": "CIRCULAR_DEPENDENCY",
+      "severity": "CRITICAL",
+      "title": "Aylanma Bog'liqlik Halqasi (3 qadam)",
+      "description": "notification ➔ orders ➔ inventory ➔ notification",
+      "recommendation": "DIP (Dependency Inversion): Umumiy interfeys yarating yoki bog'liqlikni teskarisiga o'giring.",
+      "involved_nodes": ["module:notification", "module:orders", "module:inventory", "module:notification"]
+    },
+    {
+      "id": "CLONE_1",
+      "type": "CODE_DUPLICATION",
+      "severity": "CRITICAL",
+      "title": "Type-1/2: Bir xil funksiya (99%)",
+      "description": "'compute_tax_total' (billing/tax_calculator.hpp:4) va 'calculate_order_vat' (orders/order_vat.hpp:5) [TF-IDF: 100%, CFG: 100%, API: 100%].",
+      "recommendation": "DRY: Ikkala funksiyani bitta umumiy helper/utility funksiyaga birlashtiring.",
+      "involved_nodes": ["fn:billing/tax_calculator.hpp:compute_tax_total", "fn:orders/order_vat.hpp:calculate_order_vat"]
+    },
+    {
+      "id": "CLONE_2",
+      "type": "CODE_DUPLICATION",
+      "severity": "WARNING",
+      "title": "Type-4: Ehtimoliy mantiqiy o'xshashlik (83%)",
+      "description": "'handle_security_audit' (utils/super_god_manager.hpp:18) va 'validate_database_pool' (utils/super_god_manager.hpp:32) [TF-IDF: 73%, CFG: 65%, API: 100%].",
+      "recommendation": "DRY: Ikkala funksiyani bitta umumiy helper/utility funksiyaga birlashtiring.",
+      "involved_nodes": ["fn:utils/super_god_manager.hpp:handle_security_audit", "fn:utils/super_god_manager.hpp:validate_database_pool"]
+    },
+    {
+      "id": "WRAPPER_1",
+      "type": "USELESS_WRAPPER",
+      "severity": "INFO",
+      "title": "Tranzit Wrapper: create_order",
+      "description": "Funksiya shunchaki 'check_stock' chaqiruvini o'tkazib yubormoqda.",
+      "recommendation": "To'g'ridan-to'g'ri nishon funksiyani chaqiring.",
+      "involved_nodes": ["fn:orders/order_service.hpp:create_order"]
+    },
+    {
+      "id": "WRAPPER_2",
+      "type": "USELESS_WRAPPER",
+      "severity": "INFO",
+      "title": "Tranzit Wrapper: order_gateway_proxy",
+      "description": "Funksiya shunchaki 'create_order' chaqiruvini o'tkazib yubormoqda.",
+      "recommendation": "To'g'ridan-to'g'ri nishon funksiyani chaqiring.",
+      "involved_nodes": ["fn:orders/order_vat.hpp:order_gateway_proxy"]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "fn:utils/super_god_manager.hpp:handle_security_audit",
+      "name": "handle_security_audit",
+      "type": "function",
+      "module": "utils",
+      "file_path": "utils/super_god_manager.hpp",
+      "loc": 8,
+      "complexity": 4,
+      "in_degree": 0,
+      "out_degree": 1,
+      "instability": 1,
+      "pagerank": 0.0210478,
+      "is_pass_through": false
+    },
+    {
+      "id": "module:utils",
+      "name": "utils",
+      "type": "module",
+      "module": "utils",
+      "file_path": "",
+      "loc": 0,
+      "complexity": 1,
+      "in_degree": 4,
+      "out_degree": 0,
+      "instability": 0,
+      "pagerank": 0.0632927,
+      "is_pass_through": false
+    },
+    {
+      "id": "file:utils/super_god_manager.hpp",
+      "name": "super_god_manager.hpp",
+      "type": "file",
+      "module": "utils",
+      "file_path": "utils/super_god_manager.hpp",
+      "loc": 34,
+      "complexity": 9,
+      "in_degree": 2,
+      "out_degree": 0,
+      "instability": 0,
+      "pagerank": 0.0632927,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:utils/super_god_manager.hpp:log_event",
+      "name": "log_event",
+      "type": "function",
+      "module": "utils",
+      "file_path": "utils/super_god_manager.hpp",
+      "loc": 11,
+      "complexity": 3,
+      "in_degree": 5,
+      "out_degree": 0,
+      "instability": 0,
+      "pagerank": 0.136472,
+      "is_pass_through": false
+    },
+    {
+      "id": "file:orders/order_vat.hpp",
+      "name": "order_vat.hpp",
+      "type": "file",
+      "module": "orders",
+      "file_path": "orders/order_vat.hpp",
+      "loc": 28,
+      "complexity": 6,
+      "in_degree": 0,
+      "out_degree": 0,
+      "instability": 0,
+      "pagerank": 0.0210478,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:orders/order_service.hpp:create_order",
+      "name": "create_order",
+      "type": "function",
+      "module": "orders",
+      "file_path": "orders/order_service.hpp",
+      "loc": 5,
+      "complexity": 1,
+      "in_degree": 2,
+      "out_degree": 1,
+      "instability": 0.333333,
+      "pagerank": 0.0778198,
+      "is_pass_through": true
+    },
+    {
+      "id": "file:notification/notification_service.hpp",
+      "name": "notification_service.hpp",
+      "type": "file",
+      "module": "notification",
+      "file_path": "notification/notification_service.hpp",
+      "loc": 14,
+      "complexity": 2,
+      "in_degree": 1,
+      "out_degree": 2,
+      "instability": 0.666667,
+      "pagerank": 0.0444159,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:billing/tax_calculator.hpp:compute_tax_total",
+      "name": "compute_tax_total",
+      "type": "function",
+      "module": "billing",
+      "file_path": "billing/tax_calculator.hpp",
+      "loc": 20,
+      "complexity": 6,
+      "in_degree": 0,
+      "out_degree": 0,
+      "instability": 0,
+      "pagerank": 0.0210478,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:inventory/inventory_service.hpp:check_stock",
+      "name": "check_stock",
+      "type": "function",
+      "module": "inventory",
+      "file_path": "inventory/inventory_service.hpp",
+      "loc": 8,
+      "complexity": 2,
+      "in_degree": 1,
+      "out_degree": 2,
+      "instability": 0.666667,
+      "pagerank": 0.0871947,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:orders/order_vat.hpp:calculate_order_vat",
+      "name": "calculate_order_vat",
+      "type": "function",
+      "module": "orders",
+      "file_path": "orders/order_vat.hpp",
+      "loc": 20,
+      "complexity": 6,
+      "in_degree": 0,
+      "out_degree": 0,
+      "instability": 0,
+      "pagerank": 0.0210478,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:utils/super_god_manager.hpp:validate_database_pool",
+      "name": "validate_database_pool",
+      "type": "function",
+      "module": "utils",
+      "file_path": "utils/super_god_manager.hpp",
+      "loc": 6,
+      "complexity": 3,
+      "in_degree": 0,
+      "out_degree": 1,
+      "instability": 1,
+      "pagerank": 0.0210478,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:utils/super_god_manager.hpp:manage_global_cache",
+      "name": "manage_global_cache",
+      "type": "function",
+      "module": "utils",
+      "file_path": "utils/super_god_manager.hpp",
+      "loc": 6,
+      "complexity": 2,
+      "in_degree": 0,
+      "out_degree": 1,
+      "instability": 1,
+      "pagerank": 0.0210478,
+      "is_pass_through": false
+    },
+    {
+      "id": "file:orders/order_service.hpp",
+      "name": "order_service.hpp",
+      "type": "file",
+      "module": "orders",
+      "file_path": "orders/order_service.hpp",
+      "loc": 15,
+      "complexity": 2,
+      "in_degree": 1,
+      "out_degree": 1,
+      "instability": 0.5,
+      "pagerank": 0.0399246,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:orders/order_service.hpp:retry_failed_order",
+      "name": "retry_failed_order",
+      "type": "function",
+      "module": "orders",
+      "file_path": "orders/order_service.hpp",
+      "loc": 6,
+      "complexity": 2,
+      "in_degree": 1,
+      "out_degree": 1,
+      "instability": 0.5,
+      "pagerank": 0.0457427,
+      "is_pass_through": false
+    },
+    {
+      "id": "file:billing/tax_calculator.hpp",
+      "name": "tax_calculator.hpp",
+      "type": "file",
+      "module": "billing",
+      "file_path": "billing/tax_calculator.hpp",
+      "loc": 23,
+      "complexity": 6,
+      "in_degree": 0,
+      "out_degree": 0,
+      "instability": 0,
+      "pagerank": 0.0210478,
+      "is_pass_through": false
+    },
+    {
+      "id": "module:orders",
+      "name": "orders",
+      "type": "module",
+      "module": "orders",
+      "file_path": "",
+      "loc": 0,
+      "complexity": 1,
+      "in_degree": 2,
+      "out_degree": 2,
+      "instability": 0.5,
+      "pagerank": 0.0399246,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:orders/order_vat.hpp:order_gateway_proxy",
+      "name": "order_gateway_proxy",
+      "type": "function",
+      "module": "orders",
+      "file_path": "orders/order_vat.hpp",
+      "loc": 4,
+      "complexity": 1,
+      "in_degree": 0,
+      "out_degree": 1,
+      "instability": 1,
+      "pagerank": 0.0210478,
+      "is_pass_through": true
+    },
+    {
+      "id": "module:notification",
+      "name": "notification",
+      "type": "module",
+      "module": "notification",
+      "file_path": "",
+      "loc": 0,
+      "complexity": 1,
+      "in_degree": 2,
+      "out_degree": 4,
+      "instability": 0.666667,
+      "pagerank": 0.0444159,
+      "is_pass_through": false
+    },
+    {
+      "id": "fn:notification/notification_service.hpp:send_alert",
+      "name": "send_alert",
+      "type": "function",
+      "module": "notification",
+      "file_path": "notification/notification_service.hpp",
+      "loc": 8,
+      "complexity": 2,
+      "in_degree": 1,
+      "out_degree": 2,
+      "instability": 0.666667,
+      "pagerank": 0.0581056,
+      "is_pass_through": false
+    },
+    {
+      "id": "file:inventory/inventory_service.hpp",
+      "name": "inventory_service.hpp",
+      "type": "file",
+      "module": "inventory",
+      "file_path": "inventory/inventory_service.hpp",
+      "loc": 14,
+      "complexity": 2,
+      "in_degree": 1,
+      "out_degree": 2,
+      "instability": 0.666667,
+      "pagerank": 0.0549838,
+      "is_pass_through": false
+    },
+    {
+      "id": "module:billing",
+      "name": "billing",
+      "type": "module",
+      "module": "billing",
+      "file_path": "",
+      "loc": 0,
+      "complexity": 1,
+      "in_degree": 0,
+      "out_degree": 0,
+      "instability": 0,
+      "pagerank": 0.0210478,
+      "is_pass_through": false
+    },
+    {
+      "id": "module:inventory",
+      "name": "inventory",
+      "type": "module",
+      "module": "inventory",
+      "file_path": "",
+      "loc": 0,
+      "complexity": 1,
+      "in_degree": 2,
+      "out_degree": 4,
+      "instability": 0.666667,
+      "pagerank": 0.0549838,
+      "is_pass_through": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "module:orders",
+      "target": "file:orders/order_vat.hpp",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:orders/order_vat.hpp",
+      "target": "fn:orders/order_vat.hpp:calculate_order_vat",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:orders/order_vat.hpp",
+      "target": "fn:orders/order_vat.hpp:order_gateway_proxy",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "module:orders",
+      "target": "file:orders/order_service.hpp",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:orders/order_service.hpp",
+      "target": "fn:orders/order_service.hpp:create_order",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:orders/order_service.hpp",
+      "target": "fn:orders/order_service.hpp:retry_failed_order",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "module:notification",
+      "target": "file:notification/notification_service.hpp",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:notification/notification_service.hpp",
+      "target": "fn:notification/notification_service.hpp:send_alert",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "module:inventory",
+      "target": "file:inventory/inventory_service.hpp",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:inventory/inventory_service.hpp",
+      "target": "fn:inventory/inventory_service.hpp:check_stock",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "module:utils",
+      "target": "file:utils/super_god_manager.hpp",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:utils/super_god_manager.hpp",
+      "target": "fn:utils/super_god_manager.hpp:log_event",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:utils/super_god_manager.hpp",
+      "target": "fn:utils/super_god_manager.hpp:handle_security_audit",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:utils/super_god_manager.hpp",
+      "target": "fn:utils/super_god_manager.hpp:manage_global_cache",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:utils/super_god_manager.hpp",
+      "target": "fn:utils/super_god_manager.hpp:validate_database_pool",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "module:billing",
+      "target": "file:billing/tax_calculator.hpp",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:billing/tax_calculator.hpp",
+      "target": "fn:billing/tax_calculator.hpp:compute_tax_total",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:inventory/inventory_service.hpp",
+      "target": "file:notification/notification_service.hpp",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "module:inventory",
+      "target": "module:notification",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "file:inventory/inventory_service.hpp",
+      "target": "file:utils/super_god_manager.hpp",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "module:inventory",
+      "target": "module:utils",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "file:notification/notification_service.hpp",
+      "target": "file:orders/order_service.hpp",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "module:notification",
+      "target": "module:orders",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "file:notification/notification_service.hpp",
+      "target": "file:utils/super_god_manager.hpp",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "module:notification",
+      "target": "module:utils",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "file:orders/order_service.hpp",
+      "target": "file:inventory/inventory_service.hpp",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "module:orders",
+      "target": "module:inventory",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fn:utils/super_god_manager.hpp:handle_security_audit",
+      "target": "fn:utils/super_god_manager.hpp:log_event",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "fn:orders/order_service.hpp:create_order",
+      "target": "fn:inventory/inventory_service.hpp:check_stock",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "module:orders",
+      "target": "module:inventory",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "fn:inventory/inventory_service.hpp:check_stock",
+      "target": "fn:utils/super_god_manager.hpp:log_event",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "module:inventory",
+      "target": "module:utils",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "fn:inventory/inventory_service.hpp:check_stock",
+      "target": "fn:notification/notification_service.hpp:send_alert",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "module:inventory",
+      "target": "module:notification",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "fn:utils/super_god_manager.hpp:validate_database_pool",
+      "target": "fn:utils/super_god_manager.hpp:log_event",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "fn:utils/super_god_manager.hpp:manage_global_cache",
+      "target": "fn:utils/super_god_manager.hpp:log_event",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "fn:orders/order_service.hpp:retry_failed_order",
+      "target": "fn:orders/order_service.hpp:create_order",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "fn:orders/order_vat.hpp:order_gateway_proxy",
+      "target": "fn:orders/order_service.hpp:create_order",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "fn:notification/notification_service.hpp:send_alert",
+      "target": "fn:utils/super_god_manager.hpp:log_event",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "module:notification",
+      "target": "module:utils",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "fn:notification/notification_service.hpp:send_alert",
+      "target": "fn:orders/order_service.hpp:retry_failed_order",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "module:notification",
+      "target": "module:orders",
+      "type": "calls",
+      "weight": 1
+    }
+  ]
+}

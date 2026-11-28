@@ -15,6 +15,7 @@ struct Node {
     std::string type;       // "module", "file", "function"
     std::string file_path;
     std::string module;
+    std::string scope;       // Enclosing class/struct/namespace if detected
     int line_start = 0;
     int line_end = 0;
     int loc = 0;             // lines of code
@@ -26,12 +27,15 @@ struct Node {
     int out_degree = 0;      // Efferent coupling (Ce)
     double instability = 0.0;// Ce / (Ca + Ce)
     int blast_radius = 0;    // Transitive reverse-dependency count
+    double runtime_heat = 0.0;   // Normalized [0..1] dynamic profiler heat
+    double hotspot_score = 0.0;  // Combined structural + runtime bottleneck score
     
     // Normalized token & structural fingerprints for probabilistic clone detection
     std::unordered_map<std::string, int> token_vector;
     std::unordered_map<std::string, int> norm_token_vector;
     std::vector<std::string> cfg_sequence;
     std::vector<std::string> called_identifiers;
+    std::vector<std::pair<std::string, std::string>> qualified_calls; // (qualifier, fn_name)
     std::array<double, 8> behavior_profile{};
     uint64_t exact_hash = 0;
 
@@ -72,6 +76,11 @@ public:
     // Adjacency lists for fast traversal
     std::unordered_map<std::string, std::vector<std::string>> adj;
     std::unordered_map<std::string, std::vector<std::string>> rev_adj;
+    // Dependency-only adjacency lists (excluding "contains" edges)
+    std::unordered_map<std::string, std::vector<std::string>> dep_adj;
+    std::unordered_map<std::string, std::vector<std::string>> dep_rev_adj;
+    // O(1) edge deduplication index
+    std::unordered_map<std::string, size_t> edge_index;
     
     void add_node(const Node& node);
     void add_edge(const std::string& src, const std::string& tgt, const std::string& type, int weight = 1);

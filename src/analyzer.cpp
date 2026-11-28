@@ -4,6 +4,7 @@
 #include <stack>
 #include <queue>
 #include <sstream>
+#include <fstream>
 #include <iostream>
 #include <iomanip>
 
@@ -130,14 +131,6 @@ void ArchitectureAnalyzer::calculate_coupling_and_instability(Graph& graph) {
 }
 
 void ArchitectureAnalyzer::calculate_blast_radius(Graph& graph) {
-    // Build reverse dependency adjacency excluding "contains"
-    std::unordered_map<std::string, std::vector<std::string>> dep_rev;
-    for (const auto& e : graph.edges) {
-        if (e.type == "imports" || e.type == "calls") {
-            dep_rev[e.target].push_back(e.source);
-        }
-    }
-
     for (auto& pair : graph.nodes) {
         const std::string& start = pair.first;
         if (pair.second.type == "module") {
@@ -152,8 +145,8 @@ void ArchitectureAnalyzer::calculate_blast_radius(Graph& graph) {
         while (!q.empty()) {
             std::string curr = q.front();
             q.pop();
-            auto it = dep_rev.find(curr);
-            if (it != dep_rev.end()) {
+            auto it = graph.dep_rev_adj.find(curr);
+            if (it != graph.dep_rev_adj.end()) {
                 for (const auto& nxt : it->second) {
                     if (visited.insert(nxt).second) {
                         q.push(nxt);
@@ -187,8 +180,8 @@ void ArchitectureAnalyzer::calculate_pagerank(Graph& graph, double damping, int 
         for (const auto& pair : graph.nodes) {
             const std::string& u = pair.first;
             double incoming = 0.0;
-            auto rev_it = graph.rev_adj.find(u);
-            if (rev_it != graph.rev_adj.end()) {
+            auto rev_it = graph.dep_rev_adj.find(u);
+            if (rev_it != graph.dep_rev_adj.end()) {
                 for (const auto& v : rev_it->second) {
                     if (graph.has_node(v) && graph.nodes[v].out_degree > 0) {
                         incoming += graph.nodes[v].pagerank / graph.nodes[v].out_degree;
@@ -208,8 +201,8 @@ std::vector<std::string> ArchitectureAnalyzer::find_shortest_cycle(const std::st
     std::unordered_set<std::string> scc_set(scc.begin(), scc.end());
     std::queue<std::vector<std::string>> q;
 
-    auto it = graph.adj.find(start_node);
-    if (it != graph.adj.end()) {
+    auto it = graph.dep_adj.find(start_node);
+    if (it != graph.dep_adj.end()) {
         for (const auto& nxt : it->second) {
             if (scc_set.find(nxt) != scc_set.end()) {
                 if (nxt == start_node) {
@@ -230,8 +223,8 @@ std::vector<std::string> ArchitectureAnalyzer::find_shortest_cycle(const std::st
         if (path.size() > 6) continue;
         const std::string& curr = path.back();
 
-        auto curr_it = graph.adj.find(curr);
-        if (curr_it != graph.adj.end()) {
+        auto curr_it = graph.dep_adj.find(curr);
+        if (curr_it != graph.dep_adj.end()) {
             for (const auto& nxt : curr_it->second) {
                 if (nxt == start_node) {
                     path.push_back(start_node);
@@ -269,8 +262,8 @@ void ArchitectureAnalyzer::detect_circular_dependencies(Graph& graph, std::vecto
         st.push(v);
         on_stack.insert(v);
 
-        auto it = graph.adj.find(v);
-        if (it != graph.adj.end()) {
+        auto it = graph.dep_adj.find(v);
+        if (it != graph.dep_adj.end()) {
             for (const auto& w : it->second) {
                 if (indices.find(w) == indices.end()) {
                     self(self, w);
@@ -505,76 +498,156 @@ void ArchitectureAnalyzer::detect_code_clones(Graph& graph, std::vector<CodeIssu
     DisjointSet dsu(N);
     std::vector<std::vector<double>> cluster_edge_probs(N);
 
+    // 0. Exact normalized hash buckets in O(N)
+    std::unordered_map<uint64_t, std::vector<size_t>> hash_buckets;
     for (size_t i = 0; i < N; ++i) {
+        if (fns[i].node->exact_hash != 0) {
+            hash_buckets[fns[i].node->exact_hash].push_back(i);
+        }
+    }
+    for (const auto& kv : hash_buckets) {
+        const auto& bucket = kv.second;
+        if (bucket.size() < 2) continue;
+        for (size_t b = 1; b < bucket.size(); ++b) {
+            dsu.unite(bucket[0], bucket[b]);
+            cluster_edge_probs[bucket[0]].push_back(0.99);
+            if (b <= 5) {
+                candidates.push_back({bucket[0], bucket[b], 0.99, 1.0, 1.0, 1.0, "Type-1/2: Bir xil funksiya"});
+            }
+        }
+    }
+
+    auto evaluate_pair = [&](size_t i, size_t j) {
         const auto& f1 = fns[i];
+        const auto& f2 = fns[j];
+        if (f1.node->exact_hash != 0 && f1.node->exact_hash == f2.node->exact_hash) return;
+
         double sz1 = static_cast<double>(f1.node->norm_token_vector.size());
+        double sz2 = static_cast<double>(f2.node->norm_token_vector.size());
+        double sz_ratio = std::min(sz1, sz2) / std::max(sz1, sz2);
+        double loc_ratio = static_cast<double>(std::min(f1.node->loc, f2.node->loc)) /
+                           static_cast<double>(std::max(f1.node->loc, f2.node->loc));
+        if (sz_ratio < 0.40 || loc_ratio < 0.35) return;
 
-        for (size_t j = i + 1; j < N; ++j) {
-            const auto& f2 = fns[j];
+        double sim_tfidf = cosine_sparse_double(f1.tfidf, f1.tfidf_norm, f2.tfidf, f2.tfidf_norm);
+        double sim_api = (f1.api_norm > 0.0 && f2.api_norm > 0.0)
+            ? cosine_sparse_double(f1.api_tfidf, f1.api_norm, f2.api_tfidf, f2.api_norm)
+            : 0.0;
 
-            // Exact normalized hash match (Type-1 / Type-2), including same-file duplicates
-            if (f1.node->exact_hash != 0 && f1.node->exact_hash == f2.node->exact_hash) {
-                candidates.push_back({i, j, 0.99, 1.0, 1.0, 1.0, "Type-1/2: Bir xil funksiya"});
-                dsu.unite(i, j);
-                cluster_edge_probs[i].push_back(0.99);
-                continue;
-            }
+        // Dual-gate fast prune: keep if either syntactic structure OR side-effect API footprint is similar
+        if (sim_tfidf < 0.42 && sim_api < 0.45) return;
 
-            double sz2 = static_cast<double>(f2.node->norm_token_vector.size());
-            double sz_ratio = std::min(sz1, sz2) / std::max(sz1, sz2);
-            double loc_ratio = static_cast<double>(std::min(f1.node->loc, f2.node->loc)) /
-                               static_cast<double>(std::max(f1.node->loc, f2.node->loc));
-            if (sz_ratio < 0.40 || loc_ratio < 0.35) continue;
+        double sim_behav = cosine_behavior(f1.node->behavior_profile, f2.node->behavior_profile);
+        double sim_cfg = (f1.cfg_norm > 0.0 && f2.cfg_norm > 0.0)
+            ? cosine_sparse_int(f1.cfg_3grams, f1.cfg_norm, f2.cfg_3grams, f2.cfg_norm)
+            : 0.0;
+        double sim_name = jaccard_subtokens(f1.name_subtokens, f2.name_subtokens);
 
-            double sim_tfidf = cosine_sparse_double(f1.tfidf, f1.tfidf_norm, f2.tfidf, f2.tfidf_norm);
-            double sim_api = (f1.api_norm > 0.0 && f2.api_norm > 0.0)
-                ? cosine_sparse_double(f1.api_tfidf, f1.api_norm, f2.api_tfidf, f2.api_norm)
-                : 0.0;
-
-            // Dual-gate fast prune: keep if either syntactic structure OR side-effect API footprint is similar
-            if (sim_tfidf < 0.42 && sim_api < 0.45) continue;
-
-            double sim_behav = cosine_behavior(f1.node->behavior_profile, f2.node->behavior_profile);
-            double sim_cfg = (f1.cfg_norm > 0.0 && f2.cfg_norm > 0.0)
-                ? cosine_sparse_int(f1.cfg_3grams, f1.cfg_norm, f2.cfg_3grams, f2.cfg_norm)
-                : 0.0;
-            double sim_name = jaccard_subtokens(f1.name_subtokens, f2.name_subtokens);
-
-            double base_prob = 0.0;
-            if (f1.cfg_norm > 0.0 && f2.cfg_norm > 0.0) {
-                if (f1.api_norm > 0.0 && f2.api_norm > 0.0) {
-                    base_prob = 0.32 * sim_tfidf + 0.25 * sim_cfg + 0.28 * sim_api + 0.15 * sim_behav;
-                } else {
-                    base_prob = 0.45 * sim_tfidf + 0.35 * sim_cfg + 0.20 * sim_behav;
-                }
+        double base_prob = 0.0;
+        if (f1.cfg_norm > 0.0 && f2.cfg_norm > 0.0) {
+            if (f1.api_norm > 0.0 && f2.api_norm > 0.0) {
+                base_prob = 0.32 * sim_tfidf + 0.25 * sim_cfg + 0.28 * sim_api + 0.15 * sim_behav;
             } else {
-                if (f1.api_norm > 0.0 && f2.api_norm > 0.0) {
-                    base_prob = 0.40 * sim_tfidf + 0.40 * sim_api + 0.20 * sim_behav;
-                } else {
-                    base_prob = 0.70 * sim_tfidf + 0.30 * sim_behav;
+                base_prob = 0.45 * sim_tfidf + 0.35 * sim_cfg + 0.20 * sim_behav;
+            }
+        } else {
+            if (f1.api_norm > 0.0 && f2.api_norm > 0.0) {
+                base_prob = 0.40 * sim_tfidf + 0.40 * sim_api + 0.20 * sim_behav;
+            } else {
+                base_prob = 0.70 * sim_tfidf + 0.30 * sim_behav;
+            }
+        }
+
+        double prob = std::min(0.99, base_prob + 0.10 * sim_name);
+
+        // Same function name across different files is a strong signal of accidental re-implementation
+        if (f1.node->name == f2.node->name && f1.node->file_path != f2.node->file_path) {
+            prob = std::min(0.98, prob + 0.06);
+        }
+
+        // Connect in Abstraction Sprawl Similarity Graph if strongly similar OR semantic API family
+        bool is_sprawl_edge = (prob >= 0.72) ||
+            (sim_api >= 0.58 && sim_behav >= 0.80 && sim_name >= 0.25);
+        if (is_sprawl_edge) {
+            dsu.unite(i, j);
+            cluster_edge_probs[i].push_back(prob);
+        }
+
+        if (prob >= threshold) {
+            std::string kind = (sim_tfidf >= 0.85)
+                ? "Type-3: O'zgartirilgan nusxa"
+                : "Type-4: Ehtimoliy mantiqiy o'xshashlik";
+            candidates.push_back({i, j, prob, sim_tfidf, sim_cfg, sim_api, kind});
+        }
+    };
+
+    if (N <= 400) {
+        for (size_t i = 0; i < N; ++i) {
+            for (size_t j = i + 1; j < N; ++j) {
+                evaluate_pair(i, j);
+            }
+        }
+    } else {
+        // Sub-quadratic candidate generation via top-IDF inverted index
+        std::unordered_map<std::string, std::vector<size_t>> inv_index;
+        for (size_t i = 0; i < N; ++i) {
+            std::vector<std::pair<double, std::string>> ranked;
+            ranked.reserve(fns[i].tfidf.size());
+            for (const auto& kv : fns[i].tfidf) {
+                ranked.push_back({kv.second, kv.first});
+            }
+            std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+            for (size_t k = 0; k < std::min(ranked.size(), static_cast<size_t>(10)); ++k) {
+                inv_index["T:" + ranked[k].second].push_back(i);
+            }
+
+            std::vector<std::pair<double, std::string>> api_ranked;
+            api_ranked.reserve(fns[i].api_tfidf.size());
+            for (const auto& kv : fns[i].api_tfidf) {
+                api_ranked.push_back({kv.second, kv.first});
+            }
+            std::sort(api_ranked.begin(), api_ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+            for (size_t k = 0; k < std::min(api_ranked.size(), static_cast<size_t>(6)); ++k) {
+                inv_index["A:" + api_ranked[k].second].push_back(i);
+            }
+
+            for (const auto& sub : fns[i].name_subtokens) {
+                inv_index["N:" + sub].push_back(i);
+            }
+        }
+
+        std::vector<uint32_t> seen_mark(N, 0);
+        uint32_t mark_id = 0;
+        for (size_t i = 0; i < N; ++i) {
+            mark_id++;
+            std::vector<size_t> cand_js;
+
+            auto collect_postings = [&](const std::string& key) {
+                auto it = inv_index.find(key);
+                if (it == inv_index.end() || it->second.size() > 150) return;
+                for (size_t j : it->second) {
+                    if (j > i && seen_mark[j] != mark_id) {
+                        seen_mark[j] = mark_id;
+                        cand_js.push_back(j);
+                    }
                 }
+            };
+
+            std::vector<std::pair<double, std::string>> ranked;
+            for (const auto& kv : fns[i].tfidf) ranked.push_back({kv.second, kv.first});
+            std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+            for (size_t k = 0; k < std::min(ranked.size(), static_cast<size_t>(10)); ++k) {
+                collect_postings("T:" + ranked[k].second);
+            }
+            for (const auto& kv : fns[i].api_tfidf) {
+                collect_postings("A:" + kv.first);
+            }
+            for (const auto& sub : fns[i].name_subtokens) {
+                collect_postings("N:" + sub);
             }
 
-            double prob = std::min(0.99, base_prob + 0.10 * sim_name);
-
-            // Same function name across different files is a strong signal of accidental re-implementation
-            if (f1.node->name == f2.node->name && f1.node->file_path != f2.node->file_path) {
-                prob = std::min(0.98, prob + 0.06);
-            }
-
-            // Connect in Abstraction Sprawl Similarity Graph if strongly similar OR semantic API family
-            bool is_sprawl_edge = (prob >= 0.72) ||
-                (sim_api >= 0.58 && sim_behav >= 0.80 && sim_name >= 0.25);
-            if (is_sprawl_edge) {
-                dsu.unite(i, j);
-                cluster_edge_probs[i].push_back(prob);
-            }
-
-            if (prob >= threshold) {
-                std::string kind = (sim_tfidf >= 0.85)
-                    ? "Type-3: O'zgartirilgan nusxa"
-                    : "Type-4: Ehtimoliy mantiqiy o'xshashlik";
-                candidates.push_back({i, j, prob, sim_tfidf, sim_cfg, sim_api, kind});
+            for (size_t j : cand_js) {
+                evaluate_pair(i, j);
             }
         }
     }
@@ -790,18 +863,112 @@ void ArchitectureAnalyzer::detect_orphan_nodes(Graph& graph, std::vector<CodeIss
     }
 }
 
-double ArchitectureAnalyzer::compute_health_score(const std::vector<CodeIssue>& issues, const Graph& /*graph*/) {
-    double score = 100.0;
-    for (const auto& issue : issues) {
-        score -= issue.score;
+double ArchitectureAnalyzer::compute_health_score(const std::vector<CodeIssue>& issues, const Graph& graph) {
+    size_t file_count = 0;
+    for (const auto& pair : graph.nodes) {
+        if (pair.second.type == "file") file_count++;
     }
+    // Scale penalty by sqrt(file_count / 15) so small projects remain strict while large repos don't instantly hit 10.0
+    double scale = std::max(1.0, std::sqrt(static_cast<double>(file_count) / 15.0));
+    double penalty = 0.0;
+    for (const auto& issue : issues) {
+        penalty += issue.score;
+    }
+    double score = 100.0 - (penalty / scale);
     return std::max(10.0, std::min(100.0, score));
 }
 
-void ArchitectureAnalyzer::analyze(Graph& graph, std::vector<CodeIssue>& issues, double& health_score) {
+void ArchitectureAnalyzer::apply_profiler_overlay(Graph& graph, const std::string& profile_path) {
+    if (profile_path.empty()) return;
+    std::ifstream in(profile_path);
+    if (!in.is_open()) return;
+
+    std::unordered_map<std::string, double> sym_samples;
+    std::string line;
+    double max_samples = 0.0;
+
+    while (std::getline(in, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        // Support FlameGraph folded stacks ("a;b;c 123") or CSV ("symbol,123")
+        std::string sym;
+        double val = 0.0;
+        size_t comma = line.rfind(',');
+        size_t space = line.rfind(' ');
+        if (space != std::string::npos && (comma == std::string::npos || space > comma)) {
+            std::string stack_part = line.substr(0, space);
+            try { val = std::stod(line.substr(space + 1)); } catch (...) { continue; }
+            size_t semi = stack_part.rfind(';');
+            sym = (semi != std::string::npos) ? stack_part.substr(semi + 1) : stack_part;
+        } else if (comma != std::string::npos) {
+            sym = line.substr(0, comma);
+            try { val = std::stod(line.substr(comma + 1)); } catch (...) { continue; }
+        } else {
+            continue;
+        }
+
+        // Strip C++ signature parens/scope if present
+        size_t paren = sym.find('(');
+        if (paren != std::string::npos) sym = sym.substr(0, paren);
+        size_t colons = sym.rfind("::");
+        if (colons != std::string::npos) sym = sym.substr(colons + 2);
+        while (!sym.empty() && std::isspace(static_cast<unsigned char>(sym.back()))) sym.pop_back();
+        while (!sym.empty() && std::isspace(static_cast<unsigned char>(sym.front()))) sym.erase(sym.begin());
+
+        if (!sym.empty() && val > 0.0) {
+            sym_samples[sym] += val;
+            if (sym_samples[sym] > max_samples) max_samples = sym_samples[sym];
+        }
+    }
+
+    if (max_samples <= 0.0) return;
+
+    for (auto& pair : graph.nodes) {
+        auto it = sym_samples.find(pair.second.name);
+        if (it != sym_samples.end()) {
+            pair.second.runtime_heat = std::min(1.0, it->second / max_samples);
+        }
+    }
+    // Propagate max function heat up to containing file and module
+    for (const auto& e : graph.edges) {
+        if (e.type == "contains" && graph.has_node(e.source) && graph.has_node(e.target)) {
+            double child_heat = graph.nodes[e.target].runtime_heat;
+            if (child_heat > graph.nodes[e.source].runtime_heat) {
+                graph.nodes[e.source].runtime_heat = child_heat;
+            }
+        }
+    }
+}
+
+void ArchitectureAnalyzer::calculate_hotspots(Graph& graph) {
+    double max_pr = 1e-9;
+    int max_br = 1;
+    int max_cc = 1;
+    for (const auto& pair : graph.nodes) {
+        if (pair.second.pagerank > max_pr) max_pr = pair.second.pagerank;
+        if (pair.second.blast_radius > max_br) max_br = pair.second.blast_radius;
+        if (pair.second.cyclomatic_complexity > max_cc) max_cc = pair.second.cyclomatic_complexity;
+    }
+
+    for (auto& pair : graph.nodes) {
+        auto& n = pair.second;
+        double pr_norm = n.pagerank / max_pr;
+        double br_norm = static_cast<double>(n.blast_radius) / max_br;
+        double cc_norm = static_cast<double>(n.cyclomatic_complexity) / max_cc;
+        double struct_risk = 0.40 * pr_norm + 0.35 * br_norm + 0.25 * cc_norm;
+        if (n.runtime_heat > 0.0) {
+            n.hotspot_score = 0.60 * struct_risk + 0.40 * n.runtime_heat;
+        } else {
+            n.hotspot_score = struct_risk;
+        }
+    }
+}
+
+void ArchitectureAnalyzer::analyze(Graph& graph, std::vector<CodeIssue>& issues, double& health_score, const std::string& profile_path) {
     calculate_coupling_and_instability(graph);
     calculate_blast_radius(graph);
     calculate_pagerank(graph);
+    apply_profiler_overlay(graph, profile_path);
+    calculate_hotspots(graph);
     detect_circular_dependencies(graph, issues);
     detect_layer_violations(graph, issues);
     detect_god_objects(graph, issues);

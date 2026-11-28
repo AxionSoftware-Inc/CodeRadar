@@ -1,7 +1,7 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -Isrc
+CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -pthread -Isrc
 
-SRCS = src/main.cpp src/graph.cpp src/parser.cpp src/analyzer.cpp src/json_writer.cpp src/binary_writer.cpp
+SRCS = src/main.cpp src/graph.cpp src/parser.cpp src/analyzer.cpp src/json_writer.cpp src/binary_writer.cpp src/query.cpp
 TARGET = arch_radar
 
 all: $(TARGET)

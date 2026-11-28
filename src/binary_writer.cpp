@@ -101,7 +101,7 @@ bool BinaryWriter::write_binary(const std::string& bin_path, const std::string& 
     // 2. Write Header (24 bytes)
     // Magic: "ARCH"
     write_u8('A'); write_u8('R'); write_u8('C'); write_u8('H');
-    write_u16(2); // Version 2 (includes line_start, line_end, blast_radius)
+    write_u16(3); // Version 3 (uint32_t line_start, line_end + blast_radius)
     write_f32(static_cast<float>(health_score));
     write_u32(static_cast<uint32_t>(ordered_node_ids.size()));
     write_u32(static_cast<uint32_t>(graph.edges.size()));
@@ -127,8 +127,8 @@ bool BinaryWriter::write_binary(const std::string& bin_path, const std::string& 
         write_u32(get_str_offset(n.module));
         write_u32(get_str_offset(n.file_path));
         write_u32(static_cast<uint32_t>(n.loc));
-        write_u16(static_cast<uint16_t>(n.line_start));
-        write_u16(static_cast<uint16_t>(n.line_end));
+        write_u32(static_cast<uint32_t>(n.line_start));
+        write_u32(static_cast<uint32_t>(n.line_end));
         write_u16(static_cast<uint16_t>(n.cyclomatic_complexity));
         write_u16(static_cast<uint16_t>(n.in_degree));
         write_u16(static_cast<uint16_t>(n.out_degree));
